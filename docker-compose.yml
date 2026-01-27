@@ -12,7 +12,8 @@ services:
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - AI_PROVIDER=${AI_PROVIDER:-local_ollama}
       - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl:235b-cloud}
+      - OLLAMA_FALLBACK_MODEL=${OLLAMA_FALLBACK_MODEL:-gpt-oss:120b-cloud}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     depends_on:
       postgres:

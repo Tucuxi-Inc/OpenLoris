@@ -40,12 +40,17 @@ Core workflow: User asks question → System checks automation rules → If matc
 
 ## Ollama Models Required
 
-The system expects these Ollama models to be available locally:
+The system expects these Ollama models to be available:
 
 | Model | Purpose | Pull Command |
 |-------|---------|--------------|
 | `nomic-embed-text` | **Primary embedding model** (768 dims) for automation matching | `ollama pull nomic-embed-text` |
-| `llama3.2` | Default LLM for gap analysis and AI features | `ollama pull llama3.2` |
+| `qwen3-vl:235b-cloud` | **Default inference model** for gap analysis and AI features | `ollama pull qwen3-vl:235b-cloud` |
+| `gpt-oss:120b-cloud` | **Fallback inference model** if primary unavailable | `ollama pull gpt-oss:120b-cloud` |
+
+Cloud models (names ending in `-cloud`) run on Ollama's infrastructure. Traffic is encrypted and Ollama does not store prompts or outputs. This provides a good balance of privacy and performance — works on any machine without local GPU requirements.
+
+Domain experts can select a different inference model from any model available on their Ollama instance via the Settings API (`GET /api/v1/settings/ollama-models`).
 
 **Alternative embedding models** available but not default:
 - `qwen3-embedding:0.6b` (639 MB)
@@ -266,6 +271,10 @@ For production scale, migrate to native pgvector columns with IVFFlat index.
 - `POST /rules/from-answer` - Create rule from answered question
 - `PUT /rules/{id}` - Update rule
 - `DELETE /rules/{id}` - Delete rule
+
+### Settings (`/api/v1/settings/`)
+- `GET /ai-provider` - Current AI provider config (expert-only)
+- `GET /ollama-models` - List available Ollama models (expert-only)
 
 ## Frontend State
 

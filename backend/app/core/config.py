@@ -74,7 +74,8 @@ class Settings(BaseSettings):
 
     # Ollama Settings
     OLLAMA_URL: str = Field(default="http://host.docker.internal:11434", description="Ollama server URL")
-    OLLAMA_MODEL: str = Field(default="llama3.2", description="Ollama model for inference")
+    OLLAMA_MODEL: str = Field(default="qwen3-vl:235b-cloud", description="Ollama model for inference")
+    OLLAMA_FALLBACK_MODEL: str = Field(default="gpt-oss:120b-cloud", description="Fallback Ollama model if primary unavailable")
 
     # Anthropic Settings
     ANTHROPIC_API_KEY: Optional[str] = Field(default=None, description="Anthropic Claude API key")

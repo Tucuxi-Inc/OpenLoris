@@ -2,13 +2,18 @@
 Configurable AI Provider Service - supports multiple AI backends for data privacy.
 
 Supports:
-- LOCAL: Ollama (llama3.2, mistral, mixtral) - data stays on-premise
+- LOCAL: Ollama (local or Ollama cloud models) - encrypted, no prompt/output logging
 - CLOUD_ANTHROPIC: Anthropic Claude API - direct cloud access
 - CLOUD_BEDROCK: AWS Bedrock (Claude) - data stays in your AWS account
 - CLOUD_AZURE: Azure OpenAI - data stays in your Azure account
 
 Enterprise users can keep all confidential/privileged information local or within
 controlled cloud environments where data is not shared with third parties.
+
+Ollama cloud models (e.g. qwen3-vl:235b-cloud, gpt-oss:120b-cloud) offer a good
+middle ground: traffic to Ollama is encrypted and they don't store prompts/outputs,
+but the models run on Ollama's infrastructure so they work on any machine regardless
+of local GPU capacity.
 """
 
 import logging
@@ -98,12 +103,12 @@ class AIProviderService:
     def _get_default_model(self, provider: AIProvider) -> str:
         """Get default model for each provider."""
         defaults = {
-            AIProvider.LOCAL_OLLAMA: "llama3.2",
+            AIProvider.LOCAL_OLLAMA: "qwen3-vl:235b-cloud",
             AIProvider.CLOUD_ANTHROPIC: "claude-sonnet-4-20250514",
             AIProvider.CLOUD_BEDROCK: "anthropic.claude-3-sonnet-20240229-v1:0",
             AIProvider.CLOUD_AZURE: "gpt-4"
         }
-        return defaults.get(provider, "llama3.2")
+        return defaults.get(provider, "qwen3-vl:235b-cloud")
 
     async def generate(
         self,
@@ -157,28 +162,61 @@ class AIProviderService:
         max_tokens: Optional[int],
         temperature: Optional[float]
     ) -> str:
-        """Generate using local Ollama server."""
+        """Generate using Ollama server (local or cloud models).
+
+        Tries the configured primary model first, then falls back to
+        OLLAMA_FALLBACK_MODEL if the primary is unavailable.
+        """
         base_url = self.config.base_url or "http://localhost:11434"
 
         full_prompt = prompt
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
 
-        payload = {
-            "model": self.config.model,
-            "prompt": full_prompt,
-            "stream": False,
-            "options": {
-                "num_predict": max_tokens or self.config.max_tokens,
-                "temperature": temperature or self.config.temperature
-            }
-        }
+        models_to_try = [self.config.model]
+        fallback = getattr(settings, 'OLLAMA_FALLBACK_MODEL', None)
+        if fallback and fallback != self.config.model:
+            models_to_try.append(fallback)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            response = await client.post(f"{base_url}/api/generate", json=payload)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("response", "")
+        last_error = None
+        for model in models_to_try:
+            payload = {
+                "model": model,
+                "prompt": full_prompt,
+                "stream": False,
+                "options": {
+                    "num_predict": max_tokens or self.config.max_tokens,
+                    "temperature": temperature or self.config.temperature
+                }
+            }
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    response = await client.post(f"{base_url}/api/generate", json=payload)
+                    response.raise_for_status()
+                    data = response.json()
+                    result = data.get("response", "")
+                    if model != self.config.model:
+                        logger.info(f"Used fallback Ollama model: {model}")
+                    return result
+            except Exception as e:
+                logger.warning(f"Ollama model '{model}' failed: {e}")
+                last_error = e
+
+        raise last_error or RuntimeError("All Ollama models failed")
+
+    @staticmethod
+    async def list_ollama_models() -> List[Dict[str, Any]]:
+        """List models available on the connected Ollama instance."""
+        ollama_url = getattr(settings, 'OLLAMA_URL', 'http://host.docker.internal:11434')
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{ollama_url}/api/tags")
+                response.raise_for_status()
+                data = response.json()
+                return data.get("models", [])
+        except Exception as e:
+            logger.error(f"Failed to list Ollama models: {e}")
+            return []
 
     async def _generate_anthropic(
         self,
@@ -394,8 +432,11 @@ Return ONLY valid JSON."""
 
     def _get_data_locality(self) -> str:
         """Get data locality description for the current provider."""
+        if self.config.provider == AIProvider.LOCAL_OLLAMA:
+            if self.config.model.endswith("-cloud"):
+                return "Ollama cloud (encrypted, no prompt/output storage)"
+            return "on-premise (data never leaves your servers)"
         localities = {
-            AIProvider.LOCAL_OLLAMA: "on-premise (data never leaves your servers)",
             AIProvider.CLOUD_BEDROCK: "AWS account (data stays in your VPC)",
             AIProvider.CLOUD_AZURE: "Azure tenant (data stays in your subscription)",
             AIProvider.CLOUD_ANTHROPIC: "Anthropic cloud (data sent to third party)"
@@ -404,8 +445,11 @@ Return ONLY valid JSON."""
 
     def _get_privacy_level(self) -> str:
         """Get privacy level for the current provider."""
+        if self.config.provider == AIProvider.LOCAL_OLLAMA:
+            if self.config.model.endswith("-cloud"):
+                return "high (encrypted, no prompt/output retention)"
+            return "maximum (fully on-premise)"
         levels = {
-            AIProvider.LOCAL_OLLAMA: "maximum (fully on-premise)",
             AIProvider.CLOUD_BEDROCK: "high (your AWS account only)",
             AIProvider.CLOUD_AZURE: "high (your Azure tenant only)",
             AIProvider.CLOUD_ANTHROPIC: "standard (third-party processing)"
