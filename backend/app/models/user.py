@@ -3,8 +3,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, text
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM
+from sqlalchemy import String, Boolean, DateTime, Enum as SAEnum, ForeignKey, text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -44,7 +44,7 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     # Role & Status
     role: Mapped[UserRole] = mapped_column(
-        ENUM(UserRole, name="user_role", create_type=True),
+        SAEnum(UserRole, values_callable=lambda obj: [e.value for e in obj]),
         default=UserRole.BUSINESS_USER,
         nullable=False
     )

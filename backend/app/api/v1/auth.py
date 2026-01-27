@@ -35,13 +35,6 @@ class TokenData(BaseModel):
     user_id: Optional[str] = None
 
 
-class UserCreate(BaseModel):
-    email: EmailStr
-    password: str
-    name: str
-    organization_id: Optional[UUID] = None
-
-
 class UserResponse(BaseModel):
     id: UUID
     email: str
@@ -55,6 +48,22 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RegisterResponse(BaseModel):
+    user: UserResponse
+    access_token: str
+    refresh_token: str
+    token_type: str
+
+
+class UserCreate(BaseModel):
+    email: EmailStr
+    password: str
+    name: str
+    organization_id: Optional[UUID] = None
+    organization_name: Optional[str] = None
+    role: Optional[UserRole] = UserRole.BUSINESS_USER
 
 
 class UserUpdate(BaseModel):
@@ -134,9 +143,9 @@ async def get_current_admin(current_user: User = Depends(get_current_user)) -> U
 
 
 # Endpoints
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=RegisterResponse)
 async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    """Register a new user"""
+    """Register a new user and return tokens"""
     # Check if email exists
     result = await db.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
@@ -145,17 +154,27 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
             detail="Email already registered"
         )
 
-    # Get or create default organization
+    # Get or create organization
     org_id = user_data.organization_id
     if not org_id:
-        result = await db.execute(select(Organization).limit(1))
-        org = result.scalar_one_or_none()
-        if not org:
-            # Create default organization
-            org = Organization(name="Default Organization", slug="default")
-            db.add(org)
-            await db.flush()
-        org_id = org.id
+        if user_data.organization_name:
+            # Look up by name first
+            slug = user_data.organization_name.lower().replace(" ", "-")
+            result = await db.execute(select(Organization).where(Organization.slug == slug))
+            org = result.scalar_one_or_none()
+            if not org:
+                org = Organization(name=user_data.organization_name, slug=slug)
+                db.add(org)
+                await db.flush()
+            org_id = org.id
+        else:
+            result = await db.execute(select(Organization).limit(1))
+            org = result.scalar_one_or_none()
+            if not org:
+                org = Organization(name="Default Organization", slug="default")
+                db.add(org)
+                await db.flush()
+            org_id = org.id
 
     # Create user
     user = User(
@@ -163,13 +182,22 @@ async def register(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
         name=user_data.name,
         hashed_password=get_password_hash(user_data.password),
         organization_id=org_id,
-        role=UserRole.BUSINESS_USER
+        role=user_data.role or UserRole.BUSINESS_USER
     )
     db.add(user)
     await db.commit()
     await db.refresh(user)
 
-    return user
+    # Create tokens
+    access_token = create_access_token(data={"sub": str(user.id)})
+    refresh_token = create_refresh_token(data={"sub": str(user.id)})
+
+    return {
+        "user": user,
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
 
 
 @router.post("/login", response_model=Token)

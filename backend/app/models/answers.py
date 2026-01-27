@@ -3,8 +3,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ENUM
+from sqlalchemy import String, DateTime, Enum as SAEnum, ForeignKey, Text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -46,7 +46,7 @@ class Answer(Base, UUIDMixin, TimestampMixin):
     # Answer content
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[AnswerSource] = mapped_column(
-        ENUM(AnswerSource, name="answer_source", create_type=True),
+        SAEnum(AnswerSource, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False
     )
 

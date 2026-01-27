@@ -3,8 +3,8 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Text, text
-from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY, ENUM
+from sqlalchemy import String, Integer, Boolean, DateTime, Enum as SAEnum, ForeignKey, Text, text
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDMixin
@@ -75,13 +75,13 @@ class Question(Base, UUIDMixin, TimestampMixin):
 
     # Status & Priority
     status: Mapped[QuestionStatus] = mapped_column(
-        ENUM(QuestionStatus, name="question_status", create_type=True),
+        SAEnum(QuestionStatus, values_callable=lambda obj: [e.value for e in obj]),
         default=QuestionStatus.SUBMITTED,
         nullable=False,
         index=True
     )
     priority: Mapped[QuestionPriority] = mapped_column(
-        ENUM(QuestionPriority, name="question_priority", create_type=True),
+        SAEnum(QuestionPriority, values_callable=lambda obj: [e.value for e in obj]),
         default=QuestionPriority.NORMAL,
         nullable=False
     )
@@ -158,7 +158,7 @@ class QuestionMessage(Base, UUIDMixin, TimestampMixin):
 
     # Message content
     message_type: Mapped[MessageType] = mapped_column(
-        ENUM(MessageType, name="message_type", create_type=True),
+        SAEnum(MessageType, values_callable=lambda obj: [e.value for e in obj]),
         nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)

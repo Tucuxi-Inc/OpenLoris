@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 from uuid import UUID
 
@@ -191,7 +191,7 @@ async def submit_feedback(
     question.satisfaction_rating = feedback.rating
     if question.status == QuestionStatus.ANSWERED:
         question.status = QuestionStatus.RESOLVED
-        question.resolved_at = datetime.utcnow()
+        question.resolved_at = datetime.now(timezone.utc)
 
     await db.commit()
 
@@ -321,7 +321,12 @@ async def submit_answer(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    if question.answer:
+    # Check for existing answer with explicit query (avoids lazy loading in async)
+    existing_answer = (await db.execute(
+        select(Answer).where(Answer.question_id == question_id)
+    )).scalar_one_or_none()
+
+    if existing_answer:
         raise HTTPException(status_code=400, detail="Question already has an answer")
 
     # Create answer
@@ -331,17 +336,17 @@ async def submit_answer(
         content=answer_data.content,
         source=answer_data.source,
         cited_knowledge=answer_data.cited_knowledge or [],
-        delivered_at=datetime.utcnow()
+        delivered_at=datetime.now(timezone.utc)
     )
 
     db.add(answer)
 
     # Update question status
     question.status = QuestionStatus.ANSWERED
-    question.first_response_at = datetime.utcnow()
+    question.first_response_at = datetime.now(timezone.utc)
     if question.created_at:
         question.response_time_seconds = int(
-            (datetime.utcnow() - question.created_at).total_seconds()
+            (datetime.now(timezone.utc) - question.created_at).total_seconds()
         )
 
     await db.commit()
