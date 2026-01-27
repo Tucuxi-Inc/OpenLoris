@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
 
     # Vector settings
-    VECTOR_DIMENSION: int = Field(default=384, description="Vector dimension")
+    VECTOR_DIMENSION: int = Field(default=768, description="Vector dimension (768 for nomic-embed-text)")
     VECTOR_SIMILARITY_THRESHOLD: float = Field(default=0.85, description="Vector similarity threshold for automation")
 
     # File upload settings

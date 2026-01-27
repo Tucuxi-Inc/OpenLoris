@@ -13,6 +13,7 @@ from app.models.questions import Question, QuestionStatus, QuestionPriority, Que
 from app.models.answers import Answer, AnswerSource
 from app.models.user import User
 from app.api.v1.auth import get_current_user, get_current_active_expert
+from app.services.automation_service import automation_service
 
 router = APIRouter()
 
@@ -34,6 +35,7 @@ class QuestionResponse(BaseModel):
     priority: QuestionPriority
     asked_by_id: UUID
     assigned_to_id: Optional[UUID]
+    automation_rule_id: Optional[UUID] = None
     created_at: datetime
     first_response_at: Optional[datetime]
     resolved_at: Optional[datetime]
@@ -68,6 +70,14 @@ class AnswerResponse(BaseModel):
         from_attributes = True
 
 
+class QuestionSubmitResponse(BaseModel):
+    """Response for question submission - includes auto-answer if matched."""
+    question: QuestionResponse
+    auto_answered: bool = False
+    auto_answer: Optional[AnswerResponse] = None
+    automation_similarity: Optional[float] = None
+
+
 class FeedbackCreate(BaseModel):
     rating: int  # 1-5
     comment: Optional[str] = None
@@ -85,13 +95,16 @@ class QuestionListResponse(BaseModel):
 
 
 # Business User Endpoints
-@router.post("/", response_model=QuestionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=QuestionSubmitResponse, status_code=status.HTTP_201_CREATED)
 async def submit_question(
     question_data: QuestionCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Submit a new question"""
+    """Submit a new question. Checks automation rules for instant answers."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     question = Question(
         organization_id=current_user.organization_id,
         asked_by_id=current_user.id,
@@ -106,9 +119,58 @@ async def submit_question(
     await db.commit()
     await db.refresh(question)
 
-    # TODO: Trigger automation check and gap analysis asynchronously
+    # Check automation rules for a matching answer
+    try:
+        check_result = await automation_service.check_for_automation(
+            db=db,
+            question_text=question_data.text,
+            organization_id=current_user.organization_id,
+            category=question_data.category,
+        )
 
-    return question
+        if check_result.action == "auto_answer" and check_result.match:
+            # Deliver auto-answer (TransWarp)
+            answer = await automation_service.deliver_auto_answer(
+                db=db,
+                question=question,
+                match=check_result.match,
+            )
+            await db.refresh(question)
+            return QuestionSubmitResponse(
+                question=question,
+                auto_answered=True,
+                auto_answer=answer,
+                automation_similarity=check_result.match.similarity,
+            )
+
+        elif check_result.action == "suggest_to_expert" and check_result.match:
+            # Medium confidence - store suggestion, queue for expert
+            question.status = QuestionStatus.EXPERT_QUEUE
+            question.gap_analysis = {
+                "automation_suggestion": {
+                    "rule_id": str(check_result.match.rule_id),
+                    "rule_name": check_result.match.rule_name,
+                    "similarity": check_result.match.similarity,
+                    "suggested_answer": check_result.match.canonical_answer,
+                }
+            }
+            await db.commit()
+            await db.refresh(question)
+
+        else:
+            # No match - queue for expert
+            question.status = QuestionStatus.EXPERT_QUEUE
+            await db.commit()
+            await db.refresh(question)
+
+    except Exception as e:
+        # Automation check failed - don't block question submission
+        logger.warning(f"Automation check failed for question {question.id}: {e}")
+        question.status = QuestionStatus.EXPERT_QUEUE
+        await db.commit()
+        await db.refresh(question)
+
+    return QuestionSubmitResponse(question=question)
 
 
 @router.get("/", response_model=QuestionListResponse)
@@ -185,27 +247,33 @@ async def submit_feedback(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    if question.status not in (QuestionStatus.ANSWERED, QuestionStatus.AUTO_ANSWERED):
+    if question.status not in (QuestionStatus.ANSWERED, QuestionStatus.AUTO_ANSWERED, QuestionStatus.RESOLVED):
         raise HTTPException(status_code=400, detail="Question has not been answered yet")
 
     question.satisfaction_rating = feedback.rating
-    if question.status == QuestionStatus.ANSWERED:
+
+    if question.status == QuestionStatus.AUTO_ANSWERED:
+        # Accepting auto-answer via feedback
+        await automation_service.handle_user_feedback(
+            db=db, question=question, accepted=True
+        )
+    elif question.status == QuestionStatus.ANSWERED:
         question.status = QuestionStatus.RESOLVED
         question.resolved_at = datetime.now(timezone.utc)
-
-    await db.commit()
+        await db.commit()
+    else:
+        await db.commit()
 
     return {"message": "Feedback submitted successfully"}
 
 
-@router.post("/{question_id}/request-human")
-async def request_human_review(
+@router.post("/{question_id}/accept-auto")
+async def accept_auto_answer(
     question_id: UUID,
-    clarification: ClarificationRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Request human review for an auto-answered question"""
+    """Accept an auto-answer, marking the question as resolved."""
     result = await db.execute(
         select(Question).where(
             Question.id == question_id,
@@ -220,11 +288,41 @@ async def request_human_review(
     if question.status != QuestionStatus.AUTO_ANSWERED:
         raise HTTPException(status_code=400, detail="Question is not auto-answered")
 
-    question.status = QuestionStatus.HUMAN_REQUESTED
-    question.auto_answer_accepted = False
-    question.rejection_reason = clarification.message
+    await automation_service.handle_user_feedback(
+        db=db, question=question, accepted=True
+    )
 
-    await db.commit()
+    return {"message": "Auto-answer accepted"}
+
+
+@router.post("/{question_id}/request-human")
+async def request_human_review(
+    question_id: UUID,
+    clarification: ClarificationRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Reject auto-answer and request human review."""
+    result = await db.execute(
+        select(Question).where(
+            Question.id == question_id,
+            Question.asked_by_id == current_user.id
+        )
+    )
+    question = result.scalar_one_or_none()
+
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    if question.status != QuestionStatus.AUTO_ANSWERED:
+        raise HTTPException(status_code=400, detail="Question is not auto-answered")
+
+    await automation_service.handle_user_feedback(
+        db=db,
+        question=question,
+        accepted=False,
+        rejection_reason=clarification.message,
+    )
 
     return {"message": "Human review requested"}
 
