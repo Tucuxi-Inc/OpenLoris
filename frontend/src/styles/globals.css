@@ -1,0 +1,261 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tufte-inspired design system variables */
+@layer base {
+  :root {
+    /* Backgrounds - cream/off-white */
+    --background: 48 100% 99%;
+    --foreground: 0 0% 10%;
+
+    /* Cards - slightly darker cream */
+    --card: 40 33% 98%;
+    --card-foreground: 0 0% 10%;
+
+    /* Popover */
+    --popover: 48 100% 99%;
+    --popover-foreground: 0 0% 10%;
+
+    /* Primary - Loris brown */
+    --primary: 28 52% 36%;
+    --primary-foreground: 48 100% 99%;
+
+    /* Secondary - warm gray */
+    --secondary: 40 10% 96%;
+    --secondary-foreground: 0 0% 10%;
+
+    /* Muted */
+    --muted: 40 10% 96%;
+    --muted-foreground: 0 0% 42%;
+
+    /* Accent */
+    --accent: 40 10% 96%;
+    --accent-foreground: 0 0% 10%;
+
+    /* Destructive - burgundy */
+    --destructive: 0 52% 36%;
+    --destructive-foreground: 48 100% 99%;
+
+    /* Border - hairline rules */
+    --border: 40 10% 90%;
+    --input: 40 10% 90%;
+    --ring: 28 52% 36%;
+
+    /* Radius - subtle, not pill-shaped */
+    --radius: 2px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  body {
+    @apply bg-cream text-ink font-serif antialiased;
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+
+  /* Headings - serif with tight letter spacing */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif tracking-tight;
+  }
+
+  h1 {
+    @apply text-4xl font-normal;
+  }
+
+  h2 {
+    @apply text-3xl font-normal;
+  }
+
+  h3 {
+    @apply text-2xl font-normal;
+  }
+
+  h4 {
+    @apply text-xl font-normal;
+  }
+
+  /* Links - Loris brown, no underline until hover */
+  a {
+    @apply text-loris-brown no-underline hover:underline;
+  }
+
+  /* Horizontal rules - thin, understated */
+  hr {
+    @apply border-t border-rule-light my-6;
+  }
+
+  /* Code and data labels - monospace */
+  code, kbd, pre {
+    @apply font-mono text-sm;
+  }
+}
+
+/* Tufte-specific component styles */
+@layer components {
+  /* Card - subtle, paper-like, no shadow */
+  .card-tufte {
+    @apply bg-cream-100 border border-rule-light rounded-sm p-6;
+    box-shadow: none;
+  }
+
+  .card-elevated {
+    @apply border-l-[3px] border-l-loris-brown;
+  }
+
+  /* Button - understated, not shouty */
+  .btn-primary {
+    @apply font-serif text-sm font-medium tracking-wide uppercase;
+    @apply text-cream bg-ink-primary;
+    @apply px-5 py-2.5 border border-ink-primary rounded-sm;
+    @apply transition-colors duration-150;
+  }
+
+  .btn-primary:hover {
+    @apply bg-ink-secondary;
+  }
+
+  .btn-secondary {
+    @apply font-serif text-sm font-medium tracking-wide uppercase;
+    @apply text-ink-primary bg-transparent;
+    @apply px-5 py-2.5 border border-rule-medium rounded-sm;
+    @apply transition-colors duration-150;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-cream-200;
+  }
+
+  /* Input - clean, minimal */
+  .input-tufte {
+    @apply font-serif text-base;
+    @apply bg-cream border border-rule-medium rounded-sm;
+    @apply px-4 py-3;
+    @apply transition-colors duration-150;
+    @apply focus:outline-none focus:border-ink-primary;
+  }
+
+  /* Label - monospace, uppercase */
+  .label-tufte {
+    @apply font-mono text-xs tracking-wide uppercase text-ink-secondary;
+    @apply mb-2 block;
+  }
+
+  /* Status indicators - typographic, not colorful badges */
+  .status {
+    @apply font-mono text-xs tracking-wide uppercase;
+  }
+
+  .status-pending {
+    @apply text-status-warning;
+  }
+
+  .status-complete {
+    @apply text-status-success;
+  }
+
+  .status-error {
+    @apply text-status-error;
+  }
+
+  /* Tables - Tufte style */
+  .table-tufte {
+    @apply w-full border-collapse font-serif;
+  }
+
+  .table-tufte th {
+    @apply font-mono text-xs font-medium tracking-wide uppercase text-left;
+    @apply px-4 py-3 border-b-2 border-ink-primary;
+  }
+
+  .table-tufte td {
+    @apply px-4 py-3 border-b border-rule-light;
+  }
+
+  .table-tufte td.numeric {
+    @apply font-mono text-right;
+  }
+
+  /* Metrics display */
+  .metric {
+    @apply text-center;
+  }
+
+  .metric-value {
+    @apply font-serif text-4xl font-normal text-ink-primary leading-none;
+  }
+
+  .metric-label {
+    @apply font-mono text-xs tracking-wide uppercase text-ink-tertiary mt-2;
+  }
+
+  /* Loris illustration container */
+  .loris-illustration {
+    @apply p-4 text-center;
+  }
+
+  .loris-illustration img {
+    @apply max-w-[120px] h-auto;
+    filter: none;
+    box-shadow: none;
+  }
+
+  .loris-caption {
+    @apply font-serif italic text-sm text-ink-secondary mt-2;
+  }
+
+  /* Content width for readability */
+  .content-width {
+    @apply max-w-prose;
+  }
+
+  /* Dashboard width */
+  .dashboard-width {
+    @apply max-w-6xl;
+  }
+
+  /* Page padding */
+  .page-padding {
+    @apply px-8 py-12 lg:px-12;
+  }
+
+  /* Rule variations */
+  .rule-section {
+    @apply border-t border-rule-medium;
+  }
+
+  .rule-strong {
+    @apply border-t-2 border-ink-primary;
+  }
+}
+
+/* Loading animation */
+@keyframes dots {
+  0%, 20% {
+    color: transparent;
+    text-shadow: 0.25em 0 0 transparent, 0.5em 0 0 transparent;
+  }
+  40% {
+    color: currentColor;
+    text-shadow: 0.25em 0 0 transparent, 0.5em 0 0 transparent;
+  }
+  60% {
+    text-shadow: 0.25em 0 0 currentColor, 0.5em 0 0 transparent;
+  }
+  80%, 100% {
+    text-shadow: 0.25em 0 0 currentColor, 0.5em 0 0 currentColor;
+  }
+}
+
+.loading-dots::after {
+  content: '';
+  animation: dots 1.5s infinite;
+}

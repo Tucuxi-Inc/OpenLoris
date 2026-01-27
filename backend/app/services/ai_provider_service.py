@@ -1,0 +1,417 @@
+"""
+Configurable AI Provider Service - supports multiple AI backends for data privacy.
+
+Supports:
+- LOCAL: Ollama (llama3.2, mistral, mixtral) - data stays on-premise
+- CLOUD_ANTHROPIC: Anthropic Claude API - direct cloud access
+- CLOUD_BEDROCK: AWS Bedrock (Claude) - data stays in your AWS account
+- CLOUD_AZURE: Azure OpenAI - data stays in your Azure account
+
+Enterprise users can keep all confidential/privileged information local or within
+controlled cloud environments where data is not shared with third parties.
+"""
+
+import logging
+import json
+from typing import Optional, Dict, Any, List
+from enum import Enum
+from dataclasses import dataclass
+import httpx
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class AIProvider(Enum):
+    """Supported AI providers."""
+    LOCAL_OLLAMA = "local_ollama"
+    CLOUD_ANTHROPIC = "cloud_anthropic"
+    CLOUD_BEDROCK = "cloud_bedrock"
+    CLOUD_AZURE = "cloud_azure"
+
+
+@dataclass
+class AIConfig:
+    """Configuration for AI provider."""
+    provider: AIProvider
+    model: str
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    region: Optional[str] = None  # For AWS Bedrock
+    max_tokens: int = 4096
+    temperature: float = 0.7
+    log_prompts: bool = False
+    log_responses: bool = False
+
+
+class AIProviderService:
+    """
+    Unified AI provider service supporting multiple backends.
+
+    Data Privacy:
+    - LOCAL_OLLAMA: All data stays on your servers, no external calls
+    - CLOUD_BEDROCK: Data stays in your AWS VPC, not shared with Anthropic
+    - CLOUD_AZURE: Data stays in your Azure tenant
+    - CLOUD_ANTHROPIC: Data sent to Anthropic (may not be suitable for privileged info)
+    """
+
+    def __init__(self, config: Optional[AIConfig] = None):
+        """Initialize with configuration or load from settings."""
+        if config:
+            self.config = config
+        else:
+            self.config = self._load_config_from_settings()
+
+        self._client = None
+        logger.info(f"AI Provider initialized: {self.config.provider.value} with model {self.config.model}")
+
+    def _load_config_from_settings(self) -> AIConfig:
+        """Load AI configuration from application settings."""
+        provider_str = getattr(settings, 'AI_PROVIDER', 'local_ollama')
+
+        try:
+            provider = AIProvider(provider_str)
+        except ValueError:
+            logger.warning(f"Unknown AI provider '{provider_str}', defaulting to local_ollama")
+            provider = AIProvider.LOCAL_OLLAMA
+
+        # Get model - prefer AI_MODEL, then provider-specific setting, then default
+        model = getattr(settings, 'AI_MODEL', None)
+        if not model and provider == AIProvider.LOCAL_OLLAMA:
+            model = getattr(settings, 'OLLAMA_MODEL', None)
+        if not model:
+            model = self._get_default_model(provider)
+
+        return AIConfig(
+            provider=provider,
+            model=model,
+            api_key=getattr(settings, 'ANTHROPIC_API_KEY', None),
+            base_url=getattr(settings, 'AI_BASE_URL', None) or getattr(settings, 'OLLAMA_URL', 'http://localhost:11434'),
+            region=getattr(settings, 'AWS_REGION', 'us-east-1'),
+            max_tokens=getattr(settings, 'AI_MAX_TOKENS', 4096),
+            temperature=getattr(settings, 'AI_TEMPERATURE', 0.7),
+            log_prompts=getattr(settings, 'AI_LOG_PROMPTS', False),
+            log_responses=getattr(settings, 'AI_LOG_RESPONSES', False)
+        )
+
+    def _get_default_model(self, provider: AIProvider) -> str:
+        """Get default model for each provider."""
+        defaults = {
+            AIProvider.LOCAL_OLLAMA: "llama3.2",
+            AIProvider.CLOUD_ANTHROPIC: "claude-sonnet-4-20250514",
+            AIProvider.CLOUD_BEDROCK: "anthropic.claude-3-sonnet-20240229-v1:0",
+            AIProvider.CLOUD_AZURE: "gpt-4"
+        }
+        return defaults.get(provider, "llama3.2")
+
+    async def generate(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        stop_sequences: Optional[List[str]] = None
+    ) -> str:
+        """
+        Generate a response from the AI model.
+
+        Args:
+            prompt: The user prompt
+            system_prompt: Optional system prompt for context
+            max_tokens: Override default max tokens
+            temperature: Override default temperature
+            stop_sequences: Optional stop sequences
+
+        Returns:
+            Generated text response
+        """
+        if self.config.log_prompts:
+            logger.debug(f"AI Prompt: {prompt[:200]}...")
+
+        try:
+            if self.config.provider == AIProvider.LOCAL_OLLAMA:
+                response = await self._generate_ollama(prompt, system_prompt, max_tokens, temperature)
+            elif self.config.provider == AIProvider.CLOUD_ANTHROPIC:
+                response = await self._generate_anthropic(prompt, system_prompt, max_tokens, temperature, stop_sequences)
+            elif self.config.provider == AIProvider.CLOUD_BEDROCK:
+                response = await self._generate_bedrock(prompt, system_prompt, max_tokens, temperature, stop_sequences)
+            elif self.config.provider == AIProvider.CLOUD_AZURE:
+                response = await self._generate_azure(prompt, system_prompt, max_tokens, temperature)
+            else:
+                raise ValueError(f"Unsupported AI provider: {self.config.provider}")
+
+            if self.config.log_responses:
+                logger.debug(f"AI Response: {response[:200]}...")
+
+            return response
+
+        except Exception as e:
+            logger.error(f"AI generation failed: {e}")
+            raise
+
+    async def _generate_ollama(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        max_tokens: Optional[int],
+        temperature: Optional[float]
+    ) -> str:
+        """Generate using local Ollama server."""
+        base_url = self.config.base_url or "http://localhost:11434"
+
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+
+        payload = {
+            "model": self.config.model,
+            "prompt": full_prompt,
+            "stream": False,
+            "options": {
+                "num_predict": max_tokens or self.config.max_tokens,
+                "temperature": temperature or self.config.temperature
+            }
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(f"{base_url}/api/generate", json=payload)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("response", "")
+
+    async def _generate_anthropic(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        max_tokens: Optional[int],
+        temperature: Optional[float],
+        stop_sequences: Optional[List[str]]
+    ) -> str:
+        """Generate using Anthropic Claude API directly."""
+        if not self.config.api_key:
+            raise ValueError("ANTHROPIC_API_KEY required for cloud_anthropic provider")
+
+        headers = {
+            "anthropic-version": "2024-10-22",
+            "x-api-key": self.config.api_key,
+            "content-type": "application/json"
+        }
+
+        payload = {
+            "model": self.config.model,
+            "max_tokens": max_tokens or self.config.max_tokens,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+
+        if system_prompt:
+            payload["system"] = system_prompt
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if stop_sequences:
+            payload["stop_sequences"] = stop_sequences
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=payload
+            )
+            response.raise_for_status()
+            data = response.json()
+            content = data.get("content", [])
+            if content and isinstance(content, list):
+                return content[0].get("text", "")
+            return ""
+
+    async def _generate_bedrock(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        max_tokens: Optional[int],
+        temperature: Optional[float],
+        stop_sequences: Optional[List[str]]
+    ) -> str:
+        """Generate using AWS Bedrock (Claude models)."""
+        try:
+            import boto3
+            from botocore.config import Config
+        except ImportError:
+            raise ImportError("boto3 required for AWS Bedrock. Install with: pip install boto3")
+
+        config = Config(
+            region_name=self.config.region or "us-east-1",
+            retries={'max_attempts': 3}
+        )
+
+        bedrock = boto3.client('bedrock-runtime', config=config)
+
+        messages = [{"role": "user", "content": prompt}]
+
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens or self.config.max_tokens,
+            "messages": messages
+        }
+
+        if system_prompt:
+            body["system"] = system_prompt
+        if temperature is not None:
+            body["temperature"] = temperature
+        if stop_sequences:
+            body["stop_sequences"] = stop_sequences
+
+        response = bedrock.invoke_model(
+            modelId=self.config.model,
+            body=json.dumps(body),
+            contentType="application/json",
+            accept="application/json"
+        )
+
+        response_body = json.loads(response['body'].read())
+        content = response_body.get("content", [])
+
+        if content and isinstance(content, list):
+            return content[0].get("text", "")
+        return ""
+
+    async def _generate_azure(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        max_tokens: Optional[int],
+        temperature: Optional[float]
+    ) -> str:
+        """Generate using Azure OpenAI."""
+        azure_endpoint = getattr(settings, 'AZURE_OPENAI_ENDPOINT', None)
+        azure_key = getattr(settings, 'AZURE_OPENAI_KEY', None)
+        deployment_name = getattr(settings, 'AZURE_OPENAI_DEPLOYMENT', self.config.model)
+
+        if not azure_endpoint or not azure_key:
+            raise ValueError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY required for cloud_azure provider")
+
+        headers = {
+            "api-key": azure_key,
+            "content-type": "application/json"
+        }
+
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "messages": messages,
+            "max_tokens": max_tokens or self.config.max_tokens,
+            "temperature": temperature or self.config.temperature
+        }
+
+        url = f"{azure_endpoint}/openai/deployments/{deployment_name}/chat/completions?api-version=2024-02-15-preview"
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            choices = data.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "")
+            return ""
+
+    async def analyze_gaps(
+        self,
+        question: str,
+        knowledge_facts: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Analyze a question against the knowledge base to identify gaps.
+
+        Returns:
+        - relevant_knowledge: Facts that apply to this question
+        - coverage_percentage: How much of the question is covered
+        - identified_gaps: What's missing
+        - proposed_answer: AI-generated answer draft
+        - confidence_score: How confident the AI is
+        """
+        system_prompt = """You are a knowledge analysis expert helping domain experts answer questions.
+Your task is to analyze what knowledge is relevant, what gaps exist, and propose an answer.
+
+Be thorough but concise. Focus on actionable insights for the expert."""
+
+        knowledge_summary = "\n".join([
+            f"- {k.get('content', k.get('fact_text', 'Unknown'))[:300]}"
+            for k in knowledge_facts[:10]
+        ]) if knowledge_facts else "No relevant knowledge found."
+
+        prompt = f"""QUESTION:
+{question}
+
+AVAILABLE KNOWLEDGE:
+{knowledge_summary}
+
+Analyze and return JSON:
+{{
+  "relevant_knowledge": ["fact1", "fact2"],
+  "coverage_percentage": 0-100,
+  "identified_gaps": ["gap1", "gap2"],
+  "proposed_answer": "Draft answer text",
+  "confidence_score": 0.0-1.0,
+  "suggested_clarifications": ["clarification1"]
+}}
+
+Return ONLY valid JSON."""
+
+        try:
+            response = await self.generate(prompt, system_prompt=system_prompt, temperature=0.3)
+
+            # Parse JSON response
+            if "```json" in response:
+                response = response.split("```json")[1].split("```")[0]
+            elif "```" in response:
+                response = response.split("```")[1].split("```")[0]
+
+            return json.loads(response.strip())
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI gap analysis response: {e}")
+            return {
+                "relevant_knowledge": [],
+                "coverage_percentage": 0,
+                "identified_gaps": ["Unable to analyze"],
+                "proposed_answer": "",
+                "confidence_score": 0.0,
+                "suggested_clarifications": []
+            }
+
+    def get_provider_info(self) -> Dict[str, Any]:
+        """Get information about the current AI provider configuration."""
+        return {
+            "provider": self.config.provider.value,
+            "model": self.config.model,
+            "data_locality": self._get_data_locality(),
+            "privacy_level": self._get_privacy_level(),
+            "max_tokens": self.config.max_tokens
+        }
+
+    def _get_data_locality(self) -> str:
+        """Get data locality description for the current provider."""
+        localities = {
+            AIProvider.LOCAL_OLLAMA: "on-premise (data never leaves your servers)",
+            AIProvider.CLOUD_BEDROCK: "AWS account (data stays in your VPC)",
+            AIProvider.CLOUD_AZURE: "Azure tenant (data stays in your subscription)",
+            AIProvider.CLOUD_ANTHROPIC: "Anthropic cloud (data sent to third party)"
+        }
+        return localities.get(self.config.provider, "unknown")
+
+    def _get_privacy_level(self) -> str:
+        """Get privacy level for the current provider."""
+        levels = {
+            AIProvider.LOCAL_OLLAMA: "maximum (fully on-premise)",
+            AIProvider.CLOUD_BEDROCK: "high (your AWS account only)",
+            AIProvider.CLOUD_AZURE: "high (your Azure tenant only)",
+            AIProvider.CLOUD_ANTHROPIC: "standard (third-party processing)"
+        }
+        return levels.get(self.config.provider, "unknown")
+
+
+# Global service instance - configured from settings
+ai_provider_service = AIProviderService()
