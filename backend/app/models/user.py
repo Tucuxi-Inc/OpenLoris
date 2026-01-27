@@ -44,7 +44,7 @@ class User(Base, UUIDMixin, TimestampMixin):
 
     # Role & Status
     role: Mapped[UserRole] = mapped_column(
-        ENUM(UserRole, name="user_role", create_type=False),
+        ENUM(UserRole, name="user_role", create_type=True),
         default=UserRole.BUSINESS_USER,
         nullable=False
     )

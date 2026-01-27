@@ -75,13 +75,13 @@ class Question(Base, UUIDMixin, TimestampMixin):
 
     # Status & Priority
     status: Mapped[QuestionStatus] = mapped_column(
-        ENUM(QuestionStatus, name="question_status", create_type=False),
+        ENUM(QuestionStatus, name="question_status", create_type=True),
         default=QuestionStatus.SUBMITTED,
         nullable=False,
         index=True
     )
     priority: Mapped[QuestionPriority] = mapped_column(
-        ENUM(QuestionPriority, name="question_priority", create_type=False),
+        ENUM(QuestionPriority, name="question_priority", create_type=True),
         default=QuestionPriority.NORMAL,
         nullable=False
     )
@@ -158,7 +158,7 @@ class QuestionMessage(Base, UUIDMixin, TimestampMixin):
 
     # Message content
     message_type: Mapped[MessageType] = mapped_column(
-        ENUM(MessageType, name="message_type", create_type=False),
+        ENUM(MessageType, name="message_type", create_type=True),
         nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)

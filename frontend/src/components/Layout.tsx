@@ -15,6 +15,11 @@ export default function Layout() {
           <div className="flex items-center justify-between">
             {/* Logo */}
             <Link to="/dashboard" className="flex items-center gap-3 no-underline hover:no-underline">
+              <img
+                src="/loris-images/Loris.png"
+                alt="Loris"
+                className="h-20 w-auto"
+              />
               <span className="font-serif text-2xl text-ink-primary">Loris</span>
               <span className="font-mono text-xs text-ink-tertiary tracking-wide uppercase">
                 Legal Q&A

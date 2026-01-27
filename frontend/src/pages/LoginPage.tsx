@@ -27,6 +27,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-12">
+          <img
+            src="/loris-images/Loris.png"
+            alt="Loris"
+            className="h-48 w-auto mx-auto mb-4"
+          />
           <h1 className="font-serif text-4xl text-ink-primary mb-2">Loris</h1>
           <p className="font-mono text-xs text-ink-tertiary tracking-wide uppercase">
             Intelligent Legal Q&A

@@ -46,7 +46,7 @@ class Answer(Base, UUIDMixin, TimestampMixin):
     # Answer content
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[AnswerSource] = mapped_column(
-        ENUM(AnswerSource, name="answer_source", create_type=False),
+        ENUM(AnswerSource, name="answer_source", create_type=True),
         nullable=False
     )
 
