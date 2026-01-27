@@ -49,3 +49,7 @@ structlog==23.2.0
 
 # Vector database for embeddings
 pgvector==0.2.4
+
+# Document parsing
+pdfplumber==0.10.3
+python-docx==1.1.0

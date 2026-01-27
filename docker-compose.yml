@@ -32,7 +32,7 @@ services:
     ports:
       - "3005:3000"
     environment:
-      - VITE_API_URL=http://localhost:8005
+      - VITE_API_URL=
       - CHOKIDAR_USEPOLLING=true
     volumes:
       - ./frontend:/app

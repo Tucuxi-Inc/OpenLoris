@@ -14,6 +14,7 @@ from app.models.answers import Answer, AnswerSource
 from app.models.user import User
 from app.api.v1.auth import get_current_user, get_current_active_expert
 from app.services.automation_service import automation_service
+from app.services.knowledge_service import knowledge_service
 
 router = APIRouter()
 
@@ -154,12 +155,30 @@ async def submit_question(
                     "suggested_answer": check_result.match.canonical_answer,
                 }
             }
+            # Run knowledge gap analysis (non-blocking)
+            try:
+                ka = await knowledge_service.run_gap_analysis(
+                    question_data.text, current_user.organization_id, db
+                )
+                if ka:
+                    question.gap_analysis["knowledge_analysis"] = ka
+            except Exception as gap_err:
+                logger.debug(f"Gap analysis skipped: {gap_err}")
             await db.commit()
             await db.refresh(question)
 
         else:
             # No match - queue for expert
             question.status = QuestionStatus.EXPERT_QUEUE
+            # Run knowledge gap analysis (non-blocking)
+            try:
+                ka = await knowledge_service.run_gap_analysis(
+                    question_data.text, current_user.organization_id, db
+                )
+                if ka:
+                    question.gap_analysis = {"knowledge_analysis": ka}
+            except Exception as gap_err:
+                logger.debug(f"Gap analysis skipped: {gap_err}")
             await db.commit()
             await db.refresh(question)
 
@@ -323,6 +342,19 @@ async def request_human_review(
         accepted=False,
         rejection_reason=clarification.message,
     )
+
+    # Run gap analysis for the expert who will handle this
+    try:
+        ka = await knowledge_service.run_gap_analysis(
+            question.original_text, current_user.organization_id, db
+        )
+        if ka:
+            existing_ga = question.gap_analysis or {}
+            existing_ga["knowledge_analysis"] = ka
+            question.gap_analysis = existing_ga
+            await db.commit()
+    except Exception:
+        pass  # Non-blocking
 
     return {"message": "Human review requested"}
 

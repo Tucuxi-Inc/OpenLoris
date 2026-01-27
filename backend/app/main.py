@@ -9,7 +9,8 @@ from app.core.database import engine, test_connection, init_db
 # Import all models to ensure SQLAlchemy relationships are properly configured
 import app.models  # noqa: F401
 
-from app.api.v1 import health, auth, questions, automation
+from app.api.v1 import health, auth, questions, automation, knowledge, users
+from app.api.v1 import documents as documents_api
 from app.api.v1 import settings as settings_api
 
 
@@ -71,6 +72,9 @@ def create_app() -> FastAPI:
     app.include_router(questions.router, prefix="/api/v1/questions", tags=["questions"])
     app.include_router(automation.router, prefix="/api/v1/automation", tags=["automation"])
     app.include_router(settings_api.router, prefix="/api/v1/settings", tags=["settings"])
+    app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
+    app.include_router(documents_api.router, prefix="/api/v1/documents", tags=["documents"])
+    app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 
     return app
 
