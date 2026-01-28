@@ -22,7 +22,7 @@ Core workflow: User asks question → System checks automation rules → If matc
 | Phase 3: Automation | COMPLETE | AutomationRule CRUD, embedding matching, auto-answer delivery |
 | Phase 4: Knowledge + Documents + UI | COMPLETE | Knowledge base, document management, role-based UI, user management |
 | Phase 5: GUD & Notifications | COMPLETE | Notification system, APScheduler GUD enforcement, polling UI |
-| Phase 6: Analytics | NOT STARTED | Metrics dashboard, automation performance |
+| Phase 6: Analytics | COMPLETE | Metrics dashboard, question trends, automation performance, knowledge coverage |
 | Phase 7: Testing & Docs | NOT STARTED | Unit/integration tests, documentation |
 
 ## Technology Stack
@@ -124,7 +124,8 @@ backend/app/
 │   ├── automation.py                # AutomationRule, Embedding, Log models
 │   ├── wisdom.py                    # WisdomFact, WisdomEmbedding, WisdomTier
 │   ├── documents.py                 # KnowledgeDocument, DocumentChunk, ExtractedFactCandidate, Department
-│   └── notifications.py            # Notification, NotificationType
+│   ├── notifications.py            # Notification, NotificationType
+│   └── analytics.py               # DailyMetrics (pre-aggregation, future use)
 ├── api/v1/
 │   ├── health.py                    # /health endpoint
 │   ├── auth.py                      # Register, login, /me, JWT tokens
@@ -133,7 +134,8 @@ backend/app/
 │   ├── knowledge.py                 # Knowledge facts CRUD, search, stats, gap analysis
 │   ├── documents.py                 # Document upload, extraction, GUD, departments
 │   ├── users.py                     # User CRUD, role/status management (admin-only)
-│   └── notifications.py            # Notification list, read, dismiss, unread count
+│   ├── notifications.py            # Notification list, read, dismiss, unread count
+│   └── analytics.py               # Overview, trends, automation, knowledge, experts (5 endpoints)
 └── services/
     ├── ai_provider_service.py       # Multi-provider AI (Ollama/Anthropic/etc.)
     ├── embedding_service.py         # Embeddings (Ollama → hash fallback)
@@ -142,7 +144,8 @@ backend/app/
     ├── document_service.py          # Document upload, parsing, fact extraction
     ├── document_expiration_service.py  # GUD enforcement, expiry checks, renewal
     ├── notification_service.py      # Create/read/dismiss notifications, workflow helpers
-    └── scheduler_service.py         # APScheduler daily GUD expiry checks
+    ├── scheduler_service.py         # APScheduler daily GUD expiry checks
+    └── analytics_service.py        # On-the-fly metrics computation (overview, trends, automation, knowledge, experts)
 ```
 
 ### Frontend File Structure
@@ -158,7 +161,8 @@ frontend/src/
 │   ├── knowledge.ts                 # Knowledge facts API (normalizes backend response shapes)
 │   ├── documents.ts                 # Documents API (upload, extraction, GUD)
 │   ├── users.ts                     # User management API (CRUD, role, status)
-│   └── notifications.ts            # Notifications API (list, read, dismiss)
+│   ├── notifications.ts            # Notifications API (list, read, dismiss)
+│   └── analytics.ts               # Analytics API (overview, trends, automation, knowledge, experts)
 ├── pages/
 │   ├── LoginPage.tsx                # Splash page with hero, login, dev quick-login buttons
 │   ├── user/
@@ -169,7 +173,8 @@ frontend/src/
 │   │   ├── ExpertQueuePage.tsx      # Expert queue (wired to API, filters, pagination)
 │   │   ├── ExpertQuestionDetail.tsx # Question + gap analysis + answer form
 │   │   ├── KnowledgeManagementPage.tsx  # Facts CRUD, search, tier management
-│   │   └── DocumentManagementPage.tsx   # Upload, extraction, candidate review, GUD
+│   │   ├── DocumentManagementPage.tsx   # Upload, extraction, candidate review, GUD
+│   │   └── AnalyticsPage.tsx          # Metrics dashboard with recharts (4 tabs, period selector)
 │   ├── admin/
 │   │   └── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate
 │   └── NotificationsPage.tsx        # Full notification list with filters, pagination
@@ -193,6 +198,8 @@ frontend/src/
 | EmbeddingService | `services/embedding_service.py` | Vector embeddings via Ollama nomic-embed-text |
 | NotificationService | `services/notification_service.py` | Create/manage notifications, workflow helpers |
 | SchedulerService | `services/scheduler_service.py` | APScheduler daily GUD expiry checks at 2 AM |
+| Analytics API | `api/v1/analytics.py` | Overview KPIs, question trends, automation stats, knowledge coverage, expert performance |
+| AnalyticsService | `services/analytics_service.py` | On-the-fly metrics from existing tables (no pre-aggregation) |
 | AIProviderService | `services/ai_provider_service.py` | Abstraction over Ollama/Anthropic/Bedrock/Azure |
 
 ### Question Lifecycle
@@ -324,6 +331,7 @@ Display as scientific illustrations (field guide style). Variants:
 - `ExtractedFactCandidate` - AI-extracted facts pending expert review
 - `Department` - Organization departments for document ownership
 - `Notification` - In-app notifications with type, read status, link URLs, extra_data JSONB
+- `DailyMetrics` - Pre-aggregated daily metrics per organization (table exists, not yet populated by scheduler)
 
 ### Vector Search
 Currently using JSONB for embedding storage with application-level cosine similarity.
@@ -401,6 +409,15 @@ For production scale, migrate to native pgvector columns with IVFFlat index.
 - `POST /read-all` - Mark all as read
 - `DELETE /{id}` - Dismiss notification
 
+### Analytics (`/api/v1/analytics/`)
+- `GET /overview?period=30d` - KPI summary (total questions, automation rate, avg response time, satisfaction)
+- `GET /questions?period=30d` - Daily volume trends, status/priority distribution
+- `GET /automation?period=30d` - Trigger/accept/reject totals, per-rule performance, daily trend
+- `GET /knowledge` - Facts by tier, expiring soon, recently added, avg confidence
+- `GET /experts?period=30d` - Expert leaderboard (questions answered, avg response time, satisfaction)
+
+All analytics endpoints require expert+ role. Period accepts: `7d`, `30d`, `90d`, `all`.
+
 ### Settings (`/api/v1/settings/`)
 - `GET /ai-provider` - Current AI provider config (expert-only)
 - `GET /ollama-models` - List available Ollama models (expert-only)
@@ -451,3 +468,4 @@ Read these in order for full context:
 9. **Knowledge tiers**: tier_0a (authoritative), tier_0b (expert-validated), tier_0c (AI-generated), pending, archived.
 10. **Notifications**: Polling-based (30s interval), not WebSocket. APScheduler for daily GUD checks. Notification triggers are non-blocking (try/except) so workflow endpoints never fail due to notification errors.
 11. **Scheduler**: APScheduler runs in-process. For multi-worker production, migrate to Celery + Redis.
+12. **Analytics**: Metrics computed on-the-fly from existing tables (no pre-aggregation). DailyMetrics table exists for future optimization. Charts use recharts with Tufte palette.
