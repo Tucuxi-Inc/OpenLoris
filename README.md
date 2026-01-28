@@ -283,7 +283,7 @@ All endpoints are documented in the interactive Swagger UI at http://localhost:8
 | Analytics | `/api/v1/analytics` | Overview, question trends, automation performance, knowledge coverage, expert performance | Expert+ |
 | Notifications | `/api/v1/notifications` | Unread count, list, mark read, dismiss | User+ |
 | Users | `/api/v1/users` | User CRUD, role/status management, sub-domain assignment | Admin |
-| Sub-Domains | `/api/v1/subdomains` | CRUD, expert assignment, routing, reassignment | Admin (CRUD), Expert+ (routing) |
+| Sub-Domains | `/api/v1/subdomains` | CRUD, expert assignment, routing, reassignment | Admin (CRUD), User+ (list), Expert+ (detail/routing) |
 | Org Settings | `/api/v1/org` | Department management, question requirements | Admin (write), User+ (read) |
 | Settings | `/api/v1/settings` | AI provider config, available models | Expert+ |
 

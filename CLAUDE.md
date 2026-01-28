@@ -453,7 +453,7 @@ For production scale, migrate to native pgvector columns with IVFFlat index.
 All analytics endpoints require expert+ role. Period accepts: `7d`, `30d`, `90d`, `all`.
 
 ### Sub-Domains (`/api/v1/subdomains/`)
-- `GET /` - List sub-domains (optionally active_only)
+- `GET /` - List sub-domains (any authenticated user, optionally active_only)
 - `POST /` - Create sub-domain (admin-only)
 - `PUT /{id}` - Update sub-domain (admin-only)
 - `DELETE /{id}` - Deactivate sub-domain (admin-only)

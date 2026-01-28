@@ -19,7 +19,7 @@ from app.core.database import get_db
 from app.models.subdomain import SubDomain, ExpertSubDomainAssignment
 from app.models.questions import Question
 from app.models.user import User
-from app.api.v1.auth import get_current_active_expert, get_current_admin
+from app.api.v1.auth import get_current_user, get_current_active_expert, get_current_admin
 from app.services.subdomain_service import subdomain_service
 
 router = APIRouter()
@@ -84,10 +84,10 @@ class SubDomainListResponse(BaseModel):
 @router.get("/", response_model=SubDomainListResponse)
 async def list_subdomains(
     active_only: bool = False,
-    current_user: User = Depends(get_current_active_expert),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all sub-domains for the organization."""
+    """List all sub-domains for the organization. Any authenticated user can access."""
     subdomains = await subdomain_service.list_subdomains(
         db, current_user.organization_id, active_only=active_only
     )
