@@ -10,6 +10,7 @@ import ExpertQueuePage from './pages/expert/ExpertQueuePage'
 import ExpertQuestionDetail from './pages/expert/ExpertQuestionDetail'
 import KnowledgeManagementPage from './pages/expert/KnowledgeManagementPage'
 import DocumentManagementPage from './pages/expert/DocumentManagementPage'
+import AnalyticsPage from './pages/expert/AnalyticsPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import NotificationsPage from './pages/NotificationsPage'
 
@@ -30,6 +31,7 @@ function App() {
           <Route path="expert/questions/:questionId" element={<ExpertQuestionDetail />} />
           <Route path="expert/knowledge" element={<KnowledgeManagementPage />} />
           <Route path="expert/documents" element={<DocumentManagementPage />} />
+          <Route path="expert/analytics" element={<AnalyticsPage />} />
           {/* Notifications */}
           <Route path="notifications" element={<NotificationsPage />} />
           {/* Admin routes */}

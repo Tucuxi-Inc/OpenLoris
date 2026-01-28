@@ -12,6 +12,7 @@ from app.models.documents import (
     DocumentType, ParsingStatus, ExtractionStatus, ValidationStatus
 )
 from app.models.notifications import Notification, NotificationType
+from app.models.analytics import DailyMetrics
 
 __all__ = [
     "Base",
@@ -45,4 +46,5 @@ __all__ = [
     "ValidationStatus",
     "Notification",
     "NotificationType",
+    "DailyMetrics",
 ]

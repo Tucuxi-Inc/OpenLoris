@@ -86,6 +86,14 @@ export default function Layout() {
                   >
                     Documents
                   </Link>
+                  <Link
+                    to="/expert/analytics"
+                    className={`font-serif text-sm no-underline ${
+                      isActivePrefix('/expert/analytics') ? 'text-loris-brown' : 'text-ink-secondary hover:text-ink-primary'
+                    }`}
+                  >
+                    Analytics
+                  </Link>
                 </>
               )}
 
