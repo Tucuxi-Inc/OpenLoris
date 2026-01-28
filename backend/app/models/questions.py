@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.user import User
     from app.models.answers import Answer
+    from app.models.subdomain import SubDomain
 
 
 class QuestionStatus(str, Enum):
@@ -69,6 +70,7 @@ class Question(Base, UUIDMixin, TimestampMixin):
     original_text: Mapped[str] = mapped_column(Text, nullable=False)
     category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     tags: Mapped[List[str]] = mapped_column(ARRAY(String(50)), default=list, nullable=False)
+    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
     # File attachments as JSON array
     attachments: Mapped[dict] = mapped_column(JSONB, default=list, nullable=False)
@@ -85,6 +87,15 @@ class Question(Base, UUIDMixin, TimestampMixin):
         default=QuestionPriority.NORMAL,
         nullable=False
     )
+
+    # Sub-domain routing
+    subdomain_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subdomains.id"),
+        nullable=True,
+        index=True,
+    )
+    ai_classified_subdomain: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Assignment
     assigned_to_id: Mapped[Optional[uuid.UUID]] = mapped_column(
@@ -132,6 +143,13 @@ class Question(Base, UUIDMixin, TimestampMixin):
         order_by="QuestionMessage.created_at"
     )
     answer: Mapped[Optional["Answer"]] = relationship("Answer", back_populates="question", uselist=False)
+    subdomain: Mapped[Optional["SubDomain"]] = relationship("SubDomain")
+    routing_records: Mapped[List["QuestionRouting"]] = relationship(
+        "QuestionRouting", back_populates="question", cascade="all, delete-orphan"
+    )
+    reassignment_requests: Mapped[List["ReassignmentRequest"]] = relationship(
+        "ReassignmentRequest", back_populates="question", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<Question {self.id} [{self.status.value}]>"
@@ -170,3 +188,102 @@ class QuestionMessage(Base, UUIDMixin, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<QuestionMessage {self.id} [{self.message_type.value}]>"
+
+
+class QuestionRouting(Base, UUIDMixin, TimestampMixin):
+    """Tracks which experts were notified about a question and who claimed it."""
+    __tablename__ = "question_routings"
+
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("questions.id"),
+        nullable=False,
+        index=True,
+    )
+    expert_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+    notified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("CURRENT_TIMESTAMP"),
+        nullable=False,
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Relationships
+    question: Mapped["Question"] = relationship("Question", back_populates="routing_records")
+    expert: Mapped["User"] = relationship("User")
+
+    def __repr__(self) -> str:
+        return f"<QuestionRouting q={self.question_id} expert={self.expert_id}>"
+
+
+class ReassignmentStatus(str, Enum):
+    """Status of a reassignment request."""
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+class ReassignmentRequest(Base, UUIDMixin, TimestampMixin):
+    """Expert requests reassignment of a question to a different sub-domain."""
+    __tablename__ = "reassignment_requests"
+
+    question_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("questions.id"),
+        nullable=False,
+        index=True,
+    )
+    requested_by_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False,
+    )
+    current_subdomain_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subdomains.id"),
+        nullable=True,
+    )
+    suggested_subdomain_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("subdomains.id"),
+        nullable=False,
+    )
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[ReassignmentStatus] = mapped_column(
+        SAEnum(ReassignmentStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=ReassignmentStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    reviewed_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    admin_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    question: Mapped["Question"] = relationship("Question", back_populates="reassignment_requests")
+    requested_by: Mapped["User"] = relationship("User", foreign_keys=[requested_by_id])
+    current_subdomain: Mapped[Optional["SubDomain"]] = relationship(
+        "SubDomain", foreign_keys=[current_subdomain_id]
+    )
+    suggested_subdomain: Mapped["SubDomain"] = relationship(
+        "SubDomain", foreign_keys=[suggested_subdomain_id]
+    )
+    reviewed_by: Mapped[Optional["User"]] = relationship("User", foreign_keys=[reviewed_by_id])
+
+    def __repr__(self) -> str:
+        return f"<ReassignmentRequest q={self.question_id} status={self.status.value}>"

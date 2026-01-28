@@ -22,6 +22,7 @@ from app.models.documents import KnowledgeDocument
 from app.models.user import User, UserRole
 from app.models.wisdom import WisdomFact
 from app.services.notification_service import notification_service
+from app.services.subdomain_service import subdomain_service
 
 logger = logging.getLogger(__name__)
 
@@ -42,14 +43,32 @@ class SchedulerService:
             name="Daily GUD expiry check",
             replace_existing=True,
         )
+        self.scheduler.add_job(
+            self.check_sla_breaches,
+            CronTrigger(minute=0),  # Every hour at :00
+            id="check_sla_breaches",
+            name="Hourly SLA breach check",
+            replace_existing=True,
+        )
         self.scheduler.start()
-        logger.info("Scheduler started — daily GUD checks at 02:00")
+        logger.info("Scheduler started — daily GUD checks at 02:00, hourly SLA checks")
 
     def stop(self):
         """Shut down the scheduler gracefully."""
         if self.scheduler:
             self.scheduler.shutdown(wait=False)
             logger.info("Scheduler stopped")
+
+    # ------------------------------------------------------------------
+    # Hourly SLA check
+    # ------------------------------------------------------------------
+
+    async def check_sla_breaches(self):
+        """Hourly job: check for questions exceeding their sub-domain's SLA."""
+        logger.info("Running hourly SLA breach check …")
+        async with AsyncSessionLocal() as db:
+            stats = await subdomain_service.check_sla_breaches(db)
+        logger.info(f"SLA check complete — {stats}")
 
     # ------------------------------------------------------------------
     # Main daily job

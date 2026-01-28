@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { questionsApi, Question } from '../../lib/api/questions'
 import { knowledgeApi } from '../../lib/api/knowledge'
+import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
 
 export default function ExpertQuestionDetail() {
   const { questionId } = useParams<{ questionId: string }>()
@@ -20,9 +21,27 @@ export default function ExpertQuestionDetail() {
   const [kbCategory, setKbCategory] = useState('')
   const [kbDomain, setKbDomain] = useState('')
 
+  // Reassignment
+  const [subdomains, setSubdomains] = useState<SubDomainItem[]>([])
+  const [showReassignment, setShowReassignment] = useState(false)
+  const [reassignSubdomain, setReassignSubdomain] = useState('')
+  const [reassignReason, setReassignReason] = useState('')
+  const [isReassigning, setIsReassigning] = useState(false)
+  const [reassignSuccess, setReassignSuccess] = useState('')
+
   useEffect(() => {
     if (questionId) loadQuestion()
+    loadSubdomains()
   }, [questionId])
+
+  const loadSubdomains = async () => {
+    try {
+      const result = await subdomainsApi.list(true)
+      setSubdomains(result.items)
+    } catch {
+      // Sub-domains not available
+    }
+  }
 
   const loadQuestion = async () => {
     try {
@@ -97,6 +116,23 @@ export default function ExpertQuestionDetail() {
     }
   }
 
+  const handleRequestReassignment = async () => {
+    if (!reassignSubdomain || !reassignReason.trim()) return
+    setIsReassigning(true)
+    try {
+      await subdomainsApi.requestReassignment(questionId!, reassignSubdomain, reassignReason)
+      setShowReassignment(false)
+      setReassignSubdomain('')
+      setReassignReason('')
+      setReassignSuccess('Reassignment request submitted. An admin will review it.')
+      setTimeout(() => setReassignSuccess(''), 5000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to request reassignment')
+    } finally {
+      setIsReassigning(false)
+    }
+  }
+
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString()
 
   if (isLoading) {
@@ -138,6 +174,11 @@ export default function ExpertQuestionDetail() {
           <p className="font-serif text-sm text-status-error">{error}</p>
         </div>
       )}
+      {reassignSuccess && (
+        <div className="p-3 bg-cream-200 border border-status-success rounded-sm mb-6">
+          <p className="font-serif text-sm text-status-success">{reassignSuccess}</p>
+        </div>
+      )}
 
       {/* Question card */}
       <div className="card-tufte mb-6">
@@ -149,7 +190,17 @@ export default function ExpertQuestionDetail() {
             {question.priority}
           </span>
           <span className="text-ink-muted">·</span>
-          <span className="font-mono text-xs text-ink-secondary">{question.category || 'Uncategorized'}</span>
+          <span className="font-mono text-xs text-ink-secondary">
+            {(() => {
+              const sdId = (question as any).subdomain_id
+              const sd = sdId ? subdomains.find(s => s.id === sdId) : null
+              if (sd) {
+                const aiFlag = (question as any).ai_classified_subdomain
+                return <>{sd.name}{aiFlag && <span className="text-ink-tertiary ml-1" title="AI-classified">(AI)</span>}</>
+              }
+              return question.category || 'Uncategorized'
+            })()}
+          </span>
           <span className="text-ink-muted">·</span>
           <span className="font-mono text-xs text-ink-muted">{formatDate(question.created_at)}</span>
           <span className="text-ink-muted">·</span>
@@ -170,9 +221,29 @@ export default function ExpertQuestionDetail() {
 
         {/* Assign button if not yet assigned */}
         {['expert_queue', 'human_requested', 'needs_clarification'].includes(question.status) && !question.assigned_to_id && (
-          <div className="mt-4">
+          <div className="mt-4 flex gap-3">
             <button onClick={handleAssign} className="btn-primary">
               Assign to Me
+            </button>
+            {subdomains.length > 0 && (
+              <button
+                onClick={() => setShowReassignment(true)}
+                className="btn-secondary"
+              >
+                Not My Sub-Domain
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Also show reassignment for assigned questions */}
+        {question.assigned_to_id && !isAnswered && subdomains.length > 0 && (
+          <div className="mt-4">
+            <button
+              onClick={() => setShowReassignment(true)}
+              className="font-serif text-sm text-ink-secondary hover:text-ink-primary"
+            >
+              Not my sub-domain — request reassignment
             </button>
           </div>
         )}
@@ -330,6 +401,63 @@ export default function ExpertQuestionDetail() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Reassignment Modal */}
+      {showReassignment && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-cream-50 rounded-sm shadow-lg p-8 w-full max-w-md border border-rule-light">
+            <h2 className="text-xl text-ink-primary mb-2">Request Reassignment</h2>
+            <p className="font-serif text-sm text-ink-secondary mb-6">
+              Suggest a different sub-domain for this question. An admin will review your request.
+            </p>
+
+            <div className="mb-4">
+              <label className="block font-mono text-xs text-ink-tertiary uppercase mb-1">
+                Suggested Sub-Domain
+              </label>
+              <select
+                value={reassignSubdomain}
+                onChange={(e) => setReassignSubdomain(e.target.value)}
+                className="input-tufte w-full"
+              >
+                <option value="">Select a sub-domain...</option>
+                {subdomains.map(sd => (
+                  <option key={sd.id} value={sd.id}>{sd.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mb-6">
+              <label className="block font-mono text-xs text-ink-tertiary uppercase mb-1">
+                Reason
+              </label>
+              <textarea
+                value={reassignReason}
+                onChange={(e) => setReassignReason(e.target.value)}
+                className="input-tufte w-full"
+                rows={3}
+                placeholder="Why should this question be reassigned?"
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-rule-light">
+              <button
+                onClick={() => { setShowReassignment(false); setReassignSubdomain(''); setReassignReason('') }}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRequestReassignment}
+                disabled={isReassigning || !reassignSubdomain || !reassignReason.trim()}
+                className="btn-primary disabled:opacity-50"
+              >
+                {isReassigning ? 'Submitting...' : 'Submit Request'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

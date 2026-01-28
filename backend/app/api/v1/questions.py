@@ -9,14 +9,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.models.questions import Question, QuestionStatus, QuestionPriority, QuestionMessage, MessageType
+from app.models.questions import (
+    Question, QuestionStatus, QuestionPriority, QuestionMessage, MessageType,
+    ReassignmentRequest, ReassignmentStatus,
+)
 from app.models.answers import Answer, AnswerSource
 from app.models.user import User
-from app.api.v1.auth import get_current_user, get_current_active_expert
+from app.models.notifications import NotificationType
+from app.api.v1.auth import get_current_user, get_current_active_expert, get_current_admin
 from app.models.automation import AutomationRule
 from app.services.automation_service import automation_service
 from app.services.knowledge_service import knowledge_service
 from app.services.notification_service import notification_service
+from app.services.subdomain_service import subdomain_service
+from app.models.subdomain import ExpertSubDomainAssignment
 
 router = APIRouter()
 
@@ -25,6 +31,8 @@ router = APIRouter()
 class QuestionCreate(BaseModel):
     text: str
     category: Optional[str] = None
+    department: Optional[str] = None
+    subdomain_id: Optional[UUID] = None
     tags: Optional[List[str]] = None
     priority: Optional[QuestionPriority] = QuestionPriority.NORMAL
 
@@ -33,6 +41,9 @@ class QuestionResponse(BaseModel):
     id: UUID
     original_text: str
     category: Optional[str]
+    department: Optional[str] = None
+    subdomain_id: Optional[UUID] = None
+    ai_classified_subdomain: bool = False
     tags: List[str]
     status: QuestionStatus
     priority: QuestionPriority
@@ -108,11 +119,27 @@ async def submit_question(
     import logging
     logger = logging.getLogger(__name__)
 
+    # Resolve sub-domain: explicit, or AI classification
+    resolved_subdomain_id = question_data.subdomain_id
+    ai_classified = False
+    if not resolved_subdomain_id:
+        try:
+            resolved_subdomain_id = await subdomain_service.classify_question(
+                db, question_data.text, current_user.organization_id
+            )
+            if resolved_subdomain_id:
+                ai_classified = True
+        except Exception as cls_err:
+            logger.debug(f"Sub-domain classification skipped: {cls_err}")
+
     question = Question(
         organization_id=current_user.organization_id,
         asked_by_id=current_user.id,
         original_text=question_data.text,
         category=question_data.category,
+        department=question_data.department,
+        subdomain_id=resolved_subdomain_id,
+        ai_classified_subdomain=ai_classified,
         tags=question_data.tags or [],
         priority=question_data.priority,
         status=QuestionStatus.SUBMITTED
@@ -201,6 +228,15 @@ async def submit_question(
         question.status = QuestionStatus.EXPERT_QUEUE
         await db.commit()
         await db.refresh(question)
+
+    # Route to sub-domain experts if applicable
+    if question.status == QuestionStatus.EXPERT_QUEUE and question.subdomain_id:
+        try:
+            await subdomain_service.route_question_to_subdomain(
+                db, question, question.subdomain_id
+            )
+        except Exception as route_err:
+            logger.debug(f"Sub-domain routing skipped: {route_err}")
 
     return QuestionSubmitResponse(question=question)
 
@@ -395,13 +431,20 @@ async def request_human_review(
 @router.get("/queue/pending", response_model=QuestionListResponse)
 async def get_expert_queue(
     category: Optional[str] = None,
+    subdomain_id: Optional[UUID] = None,
     priority: Optional[QuestionPriority] = None,
+    show_all: bool = False,
     page: int = 1,
     page_size: int = 20,
     current_user: User = Depends(get_current_active_expert),
     db: AsyncSession = Depends(get_db)
 ):
-    """Get questions in the expert queue"""
+    """Get questions in the expert queue.
+
+    By default, filters to the expert's assigned sub-domains.
+    Pass show_all=true to see all questions (admins) or unrouted ones.
+    Pass subdomain_id to filter to a specific sub-domain.
+    """
     query = select(Question).where(
         Question.organization_id == current_user.organization_id,
         Question.status.in_([
@@ -410,6 +453,23 @@ async def get_expert_queue(
             QuestionStatus.NEEDS_CLARIFICATION
         ])
     )
+
+    if subdomain_id:
+        query = query.where(Question.subdomain_id == subdomain_id)
+    elif not show_all:
+        # Filter to expert's assigned sub-domains + unrouted questions
+        expert_sd_ids = await subdomain_service.get_expert_subdomain_ids(
+            db, current_user.id
+        )
+        if expert_sd_ids:
+            from sqlalchemy import or_
+            query = query.where(
+                or_(
+                    Question.subdomain_id.in_(expert_sd_ids),
+                    Question.subdomain_id.is_(None),
+                )
+            )
+        # If expert has no sub-domain assignments, show all (backward compatible)
 
     if category:
         query = query.where(Question.category == category)
@@ -574,3 +634,262 @@ async def request_clarification(
         pass  # Non-blocking
 
     return {"message": "Clarification requested"}
+
+
+# ------------------------------------------------------------------
+# Reassignment workflow
+# ------------------------------------------------------------------
+
+class ReassignmentRequestCreate(BaseModel):
+    suggested_subdomain_id: UUID
+    reason: str
+
+
+class ReassignmentRequestResponse(BaseModel):
+    id: UUID
+    question_id: UUID
+    requested_by_id: UUID
+    requested_by_name: Optional[str] = None
+    current_subdomain_id: Optional[UUID]
+    current_subdomain_name: Optional[str] = None
+    suggested_subdomain_id: UUID
+    suggested_subdomain_name: Optional[str] = None
+    reason: str
+    status: ReassignmentStatus
+    reviewed_by_id: Optional[UUID]
+    admin_notes: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ReassignmentReviewRequest(BaseModel):
+    approved: bool
+    admin_notes: Optional[str] = None
+
+
+@router.post("/{question_id}/request-reassignment", response_model=ReassignmentRequestResponse)
+async def request_reassignment(
+    question_id: UUID,
+    data: ReassignmentRequestCreate,
+    current_user: User = Depends(get_current_active_expert),
+    db: AsyncSession = Depends(get_db),
+):
+    """Expert flags a question as not belonging to their sub-domain."""
+    result = await db.execute(
+        select(Question).where(
+            Question.id == question_id,
+            Question.organization_id == current_user.organization_id,
+        )
+    )
+    question = result.scalar_one_or_none()
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    # Check for existing pending reassignment
+    existing = await db.execute(
+        select(ReassignmentRequest).where(
+            ReassignmentRequest.question_id == question_id,
+            ReassignmentRequest.status == ReassignmentStatus.PENDING,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="A reassignment request is already pending")
+
+    req = ReassignmentRequest(
+        question_id=question_id,
+        requested_by_id=current_user.id,
+        current_subdomain_id=question.subdomain_id,
+        suggested_subdomain_id=data.suggested_subdomain_id,
+        reason=data.reason,
+    )
+    db.add(req)
+    await db.commit()
+    await db.refresh(req)
+
+    # Notify admins
+    try:
+        from app.models.user import UserRole
+        admin_result = await db.execute(
+            select(User).where(
+                User.organization_id == current_user.organization_id,
+                User.role == UserRole.ADMIN,
+                User.is_active == True,
+            )
+        )
+        admins = list(admin_result.scalars().all())
+        for admin in admins:
+            await notification_service.create_notification(
+                db=db,
+                user_id=admin.id,
+                organization_id=current_user.organization_id,
+                notification_type=NotificationType.REASSIGNMENT_REQUESTED,
+                title="Reassignment requested",
+                message=f'{current_user.name} flagged a question as wrong sub-domain',
+                link_url="/admin/reassignments",
+                extra_data={"question_id": str(question_id), "reassignment_id": str(req.id)},
+            )
+    except Exception:
+        pass
+
+    return ReassignmentRequestResponse(
+        id=req.id,
+        question_id=req.question_id,
+        requested_by_id=req.requested_by_id,
+        requested_by_name=current_user.name,
+        current_subdomain_id=req.current_subdomain_id,
+        suggested_subdomain_id=req.suggested_subdomain_id,
+        reason=req.reason,
+        status=req.status,
+        reviewed_by_id=req.reviewed_by_id,
+        admin_notes=req.admin_notes,
+        created_at=req.created_at,
+    )
+
+
+@router.get("/reassignment-requests", response_model=List[ReassignmentRequestResponse])
+async def list_reassignment_requests(
+    status_filter: Optional[ReassignmentStatus] = None,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: list reassignment requests."""
+    from app.models.subdomain import SubDomain
+
+    query = select(ReassignmentRequest).join(
+        Question, ReassignmentRequest.question_id == Question.id
+    ).where(
+        Question.organization_id == current_user.organization_id,
+    )
+    if status_filter:
+        query = query.where(ReassignmentRequest.status == status_filter)
+    query = query.order_by(ReassignmentRequest.created_at.desc())
+
+    result = await db.execute(query)
+    requests = list(result.scalars().all())
+
+    # Enrich with names
+    items = []
+    for r in requests:
+        # Get requester name
+        user_result = await db.execute(select(User.name).where(User.id == r.requested_by_id))
+        requester_name = user_result.scalar_one_or_none()
+
+        # Get subdomain names
+        current_sd_name = None
+        if r.current_subdomain_id:
+            sd_result = await db.execute(select(SubDomain.name).where(SubDomain.id == r.current_subdomain_id))
+            current_sd_name = sd_result.scalar_one_or_none()
+
+        sd_result = await db.execute(select(SubDomain.name).where(SubDomain.id == r.suggested_subdomain_id))
+        suggested_sd_name = sd_result.scalar_one_or_none()
+
+        items.append(ReassignmentRequestResponse(
+            id=r.id,
+            question_id=r.question_id,
+            requested_by_id=r.requested_by_id,
+            requested_by_name=requester_name,
+            current_subdomain_id=r.current_subdomain_id,
+            current_subdomain_name=current_sd_name,
+            suggested_subdomain_id=r.suggested_subdomain_id,
+            suggested_subdomain_name=suggested_sd_name,
+            reason=r.reason,
+            status=r.status,
+            reviewed_by_id=r.reviewed_by_id,
+            admin_notes=r.admin_notes,
+            created_at=r.created_at,
+        ))
+
+    return items
+
+
+@router.put("/reassignment-requests/{request_id}/review")
+async def review_reassignment(
+    request_id: UUID,
+    data: ReassignmentReviewRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: approve or reject a reassignment request."""
+    result = await db.execute(
+        select(ReassignmentRequest).where(ReassignmentRequest.id == request_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Reassignment request not found")
+
+    if req.status != ReassignmentStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Request already reviewed")
+
+    req.reviewed_by_id = current_user.id
+    req.reviewed_at = datetime.now(timezone.utc)
+    req.admin_notes = data.admin_notes
+
+    if data.approved:
+        req.status = ReassignmentStatus.APPROVED
+
+        # Update question's sub-domain
+        q_result = await db.execute(select(Question).where(Question.id == req.question_id))
+        question = q_result.scalar_one_or_none()
+        if question:
+            question.subdomain_id = req.suggested_subdomain_id
+            question.ai_classified_subdomain = False
+
+            # Unassign from current expert so it goes back to queue
+            question.assigned_to_id = None
+            if question.status == QuestionStatus.IN_PROGRESS:
+                question.status = QuestionStatus.EXPERT_QUEUE
+
+            # Route to new sub-domain experts
+            try:
+                await subdomain_service.route_question_to_subdomain(
+                    db, question, req.suggested_subdomain_id
+                )
+            except Exception:
+                pass
+
+        # Notify requesting expert
+        try:
+            from app.models.subdomain import SubDomain
+            sd_result = await db.execute(
+                select(SubDomain.name).where(SubDomain.id == req.suggested_subdomain_id)
+            )
+            sd_name = sd_result.scalar_one_or_none() or "Unknown"
+            await notification_service.create_notification(
+                db=db,
+                user_id=req.requested_by_id,
+                organization_id=current_user.organization_id,
+                notification_type=NotificationType.REASSIGNMENT_APPROVED,
+                title="Reassignment approved",
+                message=f'Question rerouted to "{sd_name}"',
+                link_url=f"/expert/questions/{req.question_id}",
+                extra_data={"question_id": str(req.question_id)},
+            )
+        except Exception:
+            pass
+    else:
+        req.status = ReassignmentStatus.REJECTED
+
+        # Notify requesting expert
+        try:
+            msg = "Your reassignment request was declined"
+            if data.admin_notes:
+                msg += f": {data.admin_notes[:100]}"
+            await notification_service.create_notification(
+                db=db,
+                user_id=req.requested_by_id,
+                organization_id=current_user.organization_id,
+                notification_type=NotificationType.REASSIGNMENT_REJECTED,
+                title="Reassignment declined",
+                message=msg,
+                link_url=f"/expert/questions/{req.question_id}",
+                extra_data={"question_id": str(req.question_id)},
+            )
+        except Exception:
+            pass
+
+    await db.commit()
+
+    action = "approved" if data.approved else "rejected"
+    return {"message": f"Reassignment request {action}"}

@@ -2,6 +2,11 @@ import { apiClient } from './client'
 
 export type UserRole = 'business_user' | 'domain_expert' | 'admin'
 
+export interface SubDomainBrief {
+  id: string
+  name: string
+}
+
 export interface UserListItem {
   id: string
   email: string
@@ -11,6 +16,7 @@ export interface UserListItem {
   title: string | null
   is_active: boolean
   is_verified: boolean
+  subdomain_assignments: SubDomainBrief[]
 }
 
 export interface UserListResponse {
@@ -57,4 +63,7 @@ export const usersApi = {
 
   updateStatus: (id: string, is_active: boolean) =>
     apiClient.put(`/api/v1/users/${id}/status`, { is_active }),
+
+  updateSubdomains: (id: string, subdomainIds: string[]) =>
+    apiClient.put<SubDomainBrief[]>(`/api/v1/users/${id}/subdomains`, { subdomain_ids: subdomainIds }),
 }

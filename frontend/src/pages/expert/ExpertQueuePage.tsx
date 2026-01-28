@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { questionsApi, Question, QuestionPriority } from '../../lib/api/questions'
+import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
 
 export default function ExpertQueuePage() {
   const navigate = useNavigate()
@@ -9,17 +10,33 @@ export default function ExpertQueuePage() {
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [subdomainFilter, setSubdomainFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<QuestionPriority | ''>('')
+  const [subdomains, setSubdomains] = useState<SubDomainItem[]>([])
+
+  useEffect(() => {
+    loadSubdomains()
+  }, [])
 
   useEffect(() => {
     loadQueue()
-  }, [page, categoryFilter, priorityFilter])
+  }, [page, categoryFilter, subdomainFilter, priorityFilter])
+
+  const loadSubdomains = async () => {
+    try {
+      const result = await subdomainsApi.list(true)
+      setSubdomains(result.items)
+    } catch {
+      // Sub-domains not available
+    }
+  }
 
   const loadQueue = async () => {
     try {
       setIsLoading(true)
       const params: Record<string, string> = { page: String(page), page_size: '20' }
       if (categoryFilter) params.category = categoryFilter
+      if (subdomainFilter) params.subdomain_id = subdomainFilter
       if (priorityFilter) params.priority = priorityFilter
       const result = await questionsApi.getQueue(params as { category?: string; priority?: QuestionPriority; page?: number })
       setQuestions(result.items)
@@ -62,6 +79,12 @@ export default function ExpertQueuePage() {
     return date.toLocaleDateString()
   }
 
+  const getSubdomainName = (subdomainId: string | null | undefined) => {
+    if (!subdomainId) return null
+    const sd = subdomains.find(s => s.id === subdomainId)
+    return sd?.name || null
+  }
+
   const totalPages = Math.ceil(total / 20)
 
   return (
@@ -75,20 +98,19 @@ export default function ExpertQueuePage() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 mb-8">
-        <select
-          value={categoryFilter}
-          onChange={(e) => { setCategoryFilter(e.target.value); setPage(1) }}
-          className="input-tufte text-sm"
-        >
-          <option value="">All categories</option>
-          <option value="Contracts">Contracts</option>
-          <option value="Employment">Employment</option>
-          <option value="Privacy & Data">Privacy & Data</option>
-          <option value="Intellectual Property">IP</option>
-          <option value="Compliance">Compliance</option>
-          <option value="Corporate">Corporate</option>
-        </select>
+      <div className="flex items-center gap-4 mb-8 flex-wrap">
+        {subdomains.length > 0 && (
+          <select
+            value={subdomainFilter}
+            onChange={(e) => { setSubdomainFilter(e.target.value); setPage(1) }}
+            className="input-tufte text-sm"
+          >
+            <option value="">My sub-domains</option>
+            {subdomains.map(sd => (
+              <option key={sd.id} value={sd.id}>{sd.name}</option>
+            ))}
+          </select>
+        )}
         <select
           value={priorityFilter}
           onChange={(e) => { setPriorityFilter(e.target.value as QuestionPriority | ''); setPage(1) }}
@@ -110,60 +132,73 @@ export default function ExpertQueuePage() {
         <>
           {/* Queue list */}
           <div className="space-y-4">
-            {questions.map((question) => (
-              <Link
-                key={question.id}
-                to={`/expert/questions/${question.id}`}
-                className="block no-underline"
-              >
-                <div className="card-tufte cursor-pointer hover:border-rule-medium transition-colors">
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <span className={`status uppercase ${getPriorityStyle(question.priority)}`}>
-                        {question.priority}
-                      </span>
-                      <span className="text-ink-muted">·</span>
-                      <span className="font-mono text-xs text-ink-secondary">
-                        {question.category || 'Uncategorized'}
-                      </span>
+            {questions.map((question) => {
+              const sdName = getSubdomainName((question as any).subdomain_id)
+              const aiClassified = (question as any).ai_classified_subdomain
+              return (
+                <Link
+                  key={question.id}
+                  to={`/expert/questions/${question.id}`}
+                  className="block no-underline"
+                >
+                  <div className="card-tufte cursor-pointer hover:border-rule-medium transition-colors">
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className={`status uppercase ${getPriorityStyle(question.priority)}`}>
+                          {question.priority}
+                        </span>
+                        <span className="text-ink-muted">·</span>
+                        {sdName ? (
+                          <span className="font-mono text-xs text-loris-brown">
+                            {sdName}
+                            {aiClassified && (
+                              <span className="text-ink-tertiary ml-1" title="AI-classified">(AI)</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="font-mono text-xs text-ink-secondary">
+                            {question.category || 'Uncategorized'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-mono text-xs text-ink-muted">{formatDate(question.created_at)}</span>
                     </div>
-                    <span className="font-mono text-xs text-ink-muted">{formatDate(question.created_at)}</span>
+
+                    {/* Question text */}
+                    <p className="font-serif text-lg leading-relaxed text-ink-primary mb-3">
+                      {question.original_text}
+                    </p>
+
+                    {/* Gap analysis indicator */}
+                    {question.gap_analysis && (
+                      <div className="inline-flex items-center gap-2 px-3 py-1 bg-cream-200 rounded-sm mb-3">
+                        <span className="font-mono text-xs text-status-success">Gap Analysis Ready</span>
+                      </div>
+                    )}
+
+                    {/* Footer */}
+                    <hr className="my-4" />
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs text-ink-tertiary">
+                        Status: {question.status.replace(/_/g, ' ')}
+                      </span>
+                      <div className="flex gap-4">
+                        <button
+                          onClick={(e) => handleAssign(question.id, e)}
+                          className="font-serif text-sm text-ink-secondary hover:text-ink-primary"
+                        >
+                          Assign to me
+                        </button>
+                        <span className="font-serif text-sm text-loris-brown">
+                          Review →
+                        </span>
+                      </div>
+                    </div>
                   </div>
-
-                  {/* Question text */}
-                  <p className="font-serif text-lg leading-relaxed text-ink-primary mb-3">
-                    {question.original_text}
-                  </p>
-
-                  {/* Gap analysis indicator */}
-                  {question.gap_analysis && (
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-cream-200 rounded-sm mb-3">
-                      <span className="font-mono text-xs text-status-success">Gap Analysis Ready</span>
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <hr className="my-4" />
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-ink-tertiary">
-                      Status: {question.status.replace(/_/g, ' ')}
-                    </span>
-                    <div className="flex gap-4">
-                      <button
-                        onClick={(e) => handleAssign(question.id, e)}
-                        className="font-serif text-sm text-ink-secondary hover:text-ink-primary"
-                      >
-                        Assign to me
-                      </button>
-                      <span className="font-serif text-sm text-loris-brown">
-                        Review →
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              )
+            })}
           </div>
 
           {/* Pagination */}

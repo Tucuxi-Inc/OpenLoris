@@ -12,6 +12,9 @@ import KnowledgeManagementPage from './pages/expert/KnowledgeManagementPage'
 import DocumentManagementPage from './pages/expert/DocumentManagementPage'
 import AnalyticsPage from './pages/expert/AnalyticsPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
+import SubDomainManagementPage from './pages/admin/SubDomainManagementPage'
+import ReassignmentReviewPage from './pages/admin/ReassignmentReviewPage'
+import OrgSettingsPage from './pages/admin/OrgSettingsPage'
 import NotificationsPage from './pages/NotificationsPage'
 
 function App() {
@@ -36,6 +39,9 @@ function App() {
           <Route path="notifications" element={<NotificationsPage />} />
           {/* Admin routes */}
           <Route path="admin/users" element={<UserManagementPage />} />
+          <Route path="admin/subdomains" element={<SubDomainManagementPage />} />
+          <Route path="admin/reassignments" element={<ReassignmentReviewPage />} />
+          <Route path="admin/settings" element={<OrgSettingsPage />} />
         </Route>
       </Routes>
     </AuthProvider>

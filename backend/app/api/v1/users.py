@@ -3,22 +3,28 @@ Users API — list, create, edit, delete users. Manage roles and status.
 Admin and expert routes.
 """
 
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import func, select
+from sqlalchemy import delete as sa_delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User, UserRole
+from app.models.subdomain import SubDomain, ExpertSubDomainAssignment
 from app.api.v1.auth import get_current_active_expert, get_current_admin, get_password_hash
 
 router = APIRouter()
 
 
 # ---------- Schemas ----------
+
+class SubDomainBrief(BaseModel):
+    id: UUID
+    name: str
+
 
 class UserListItem(BaseModel):
     id: UUID
@@ -29,6 +35,7 @@ class UserListItem(BaseModel):
     title: Optional[str] = None
     is_active: bool
     is_verified: bool
+    subdomain_assignments: List[SubDomainBrief] = []
 
     class Config:
         from_attributes = True
@@ -39,6 +46,10 @@ class UserListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+class SubDomainAssignmentUpdate(BaseModel):
+    subdomain_ids: List[UUID]
 
 
 class RoleUpdate(BaseModel):
@@ -89,8 +100,27 @@ async def list_users(
     stmt = stmt.order_by(User.name).offset(offset).limit(page_size)
     rows = (await db.execute(stmt)).scalars().all()
 
+    # Fetch sub-domain assignments for all users in one query
+    user_ids = [u.id for u in rows]
+    sd_stmt = (
+        select(ExpertSubDomainAssignment.expert_id, SubDomain.id, SubDomain.name)
+        .join(SubDomain, SubDomain.id == ExpertSubDomainAssignment.subdomain_id)
+        .where(ExpertSubDomainAssignment.expert_id.in_(user_ids))
+    )
+    sd_rows = (await db.execute(sd_stmt)).all()
+    # Group by user
+    user_sds: dict[UUID, list[SubDomainBrief]] = {}
+    for expert_id, sd_id, sd_name in sd_rows:
+        user_sds.setdefault(expert_id, []).append(SubDomainBrief(id=sd_id, name=sd_name))
+
+    users_out = []
+    for u in rows:
+        item = UserListItem.model_validate(u)
+        item.subdomain_assignments = user_sds.get(u.id, [])
+        users_out.append(item)
+
     return UserListResponse(
-        users=rows,
+        users=users_out,
         total=total,
         page=page,
         page_size=page_size,
@@ -255,3 +285,53 @@ async def update_user_status(
     await db.commit()
     action = "activated" if data.is_active else "deactivated"
     return {"message": f"User {action}"}
+
+
+@router.put("/{user_id}/subdomains")
+async def update_user_subdomains(
+    user_id: UUID,
+    data: SubDomainAssignmentUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set sub-domain assignments for a user (admin only). Replaces all existing assignments."""
+    result = await db.execute(
+        select(User).where(
+            User.id == user_id,
+            User.organization_id == current_user.organization_id,
+        )
+    )
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Delete existing assignments
+    await db.execute(
+        sa_delete(ExpertSubDomainAssignment).where(
+            ExpertSubDomainAssignment.expert_id == user_id
+        )
+    )
+
+    # Create new assignments
+    for sd_id in data.subdomain_ids:
+        # Verify the sub-domain exists in the same org
+        sd_result = await db.execute(
+            select(SubDomain).where(
+                SubDomain.id == sd_id,
+                SubDomain.organization_id == current_user.organization_id,
+            )
+        )
+        if not sd_result.scalar_one_or_none():
+            raise HTTPException(status_code=400, detail=f"Sub-domain {sd_id} not found")
+        db.add(ExpertSubDomainAssignment(expert_id=user_id, subdomain_id=sd_id))
+
+    await db.commit()
+
+    # Return updated assignments
+    sd_stmt = (
+        select(SubDomain.id, SubDomain.name)
+        .join(ExpertSubDomainAssignment, SubDomain.id == ExpertSubDomainAssignment.subdomain_id)
+        .where(ExpertSubDomainAssignment.expert_id == user_id)
+    )
+    sd_rows = (await db.execute(sd_stmt)).all()
+    return [SubDomainBrief(id=r[0], name=r[1]) for r in sd_rows]

@@ -43,7 +43,10 @@ Loris connects business users with domain experts, delivering curated, expert-va
 - **Gap Analysis** — AI identifies what's covered by existing knowledge and what needs expert input
 - **Knowledge Base** — Upload documents, extract facts, build an organizational knowledge graph
 - **Analytics Dashboard** — Track automation performance, question trends, knowledge coverage
-- **In-App Notifications** — Real-time alerts for answers, assignments, expiring content
+- **Sub-Domain Routing** — Questions routed to the right experts based on sub-domain classification (manual or AI)
+- **Reassignment Workflow** — Experts can flag misrouted questions; admins approve reassignments
+- **Department & Org Settings** — Configurable departments, required fields, admin settings panel
+- **In-App Notifications** — Real-time alerts for answers, assignments, routing, expiring content
 - **GUD Enforcement** — "Good Until Date" system automatically expires and deactivates stale content
 - **Multi-Provider AI** — Supports Ollama (local + cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI
 - **Data Privacy** — Local Ollama models keep data on-premise; Ollama cloud uses encrypted transport with no prompt/output retention
@@ -118,7 +121,7 @@ The login page has **quick-login buttons** for three dev accounts. On first clic
 |---------|-------|------|------------------|
 | Carol | carol@loris.dev | Business User | Ask questions, view answers, give feedback |
 | Bob | bob@loris.dev | Domain Expert | All above + answer queue, knowledge base, documents, analytics |
-| Alice | alice@loris.dev | Admin | All above + user management |
+| Alice | alice@loris.dev | Admin | All above + user management, sub-domains, settings |
 
 Password for all: `Test1234!`
 
@@ -234,8 +237,10 @@ docker-compose --profile tools up -d
 │   │   │   ├── analytics.py # Metrics dashboard (5 endpoints)
 │   │   │   ├── notifications.py # Notification list, read, dismiss
 │   │   │   ├── users.py    # User management (admin)
+│   │   │   ├── subdomains.py # Sub-domain CRUD, routing, reassignment
+│   │   │   ├── org_settings.py # Organization settings
 │   │   │   └── settings.py # AI provider config
-│   │   ├── models/         # SQLAlchemy models (16 tables)
+│   │   ├── models/         # SQLAlchemy models (18 tables)
 │   │   ├── services/       # Business logic
 │   │   │   ├── analytics_service.py    # Metrics computation
 │   │   │   ├── automation_service.py   # Matching + auto-answer delivery
@@ -244,6 +249,7 @@ docker-compose --profile tools up -d
 │   │   │   ├── notification_service.py # Notification lifecycle
 │   │   │   ├── scheduler_service.py    # Daily GUD expiry checks
 │   │   │   ├── embedding_service.py    # Ollama + hash fallback
+│   │   │   ├── subdomain_service.py   # AI classification, SLA monitoring
 │   │   │   └── ai_provider_service.py  # Multi-provider AI abstraction
 │   │   └── core/           # Config, database setup
 │   └── Dockerfile
@@ -254,7 +260,7 @@ docker-compose --profile tools up -d
 │       ├── pages/          # User, Expert, Admin, Notifications
 │       │   ├── user/       # Dashboard, QuestionDetail
 │       │   ├── expert/     # Dashboard, Queue, Knowledge, Documents, Analytics
-│       │   └── admin/      # UserManagement
+│       │   └── admin/      # UserManagement, SubDomains, Reassignments, OrgSettings
 │       ├── lib/api/        # API clients (questions, knowledge, documents, analytics, etc.)
 │       └── styles/         # Tufte design system
 ├── database/               # init.sql (pgvector extension)
@@ -276,7 +282,9 @@ All endpoints are documented in the interactive Swagger UI at http://localhost:8
 | Documents | `/api/v1/documents` | Upload, extraction, fact candidates, GUD, departments | Expert+ |
 | Analytics | `/api/v1/analytics` | Overview, question trends, automation performance, knowledge coverage, expert performance | Expert+ |
 | Notifications | `/api/v1/notifications` | Unread count, list, mark read, dismiss | User+ |
-| Users | `/api/v1/users` | User CRUD, role/status management | Admin |
+| Users | `/api/v1/users` | User CRUD, role/status management, sub-domain assignment | Admin |
+| Sub-Domains | `/api/v1/subdomains` | CRUD, expert assignment, routing, reassignment | Admin (CRUD), Expert+ (routing) |
+| Org Settings | `/api/v1/org` | Department management, question requirements | Admin (write), User+ (read) |
 | Settings | `/api/v1/settings` | AI provider config, available models | Expert+ |
 
 ## AI Provider Configuration
@@ -301,6 +309,7 @@ Edit `.env` to switch AI providers:
 | Phase 4: Knowledge + Documents + UI | Complete | Knowledge base, document management, role-based UI |
 | Phase 5: Notifications & GUD | Complete | In-app notifications, scheduled GUD enforcement |
 | Phase 6: Analytics | Complete | Metrics dashboard, question trends, automation performance |
+| Phase 6.5: Sub-Domain Routing & Org Settings | Complete | Sub-domains, expert routing, reassignment, departments, org settings |
 | Phase 7: Testing & Docs | Not started | Unit/integration tests, Alembic migrations |
 
 ## Documentation

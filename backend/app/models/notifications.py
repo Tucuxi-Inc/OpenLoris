@@ -45,6 +45,13 @@ class NotificationType(str, Enum):
     FACT_EXPIRING_SOON = "fact_expiring_soon"
     FACT_EXPIRED = "fact_expired"
 
+    # Sub-domain routing
+    QUESTION_ROUTED = "question_routed"
+    SLA_BREACH = "sla_breach"
+    REASSIGNMENT_REQUESTED = "reassignment_requested"
+    REASSIGNMENT_APPROVED = "reassignment_approved"
+    REASSIGNMENT_REJECTED = "reassignment_rejected"
+
 
 class Notification(Base, UUIDMixin, TimestampMixin):
     """In-app notification for a user."""

@@ -23,6 +23,7 @@ Core workflow: User asks question → System checks automation rules → If matc
 | Phase 4: Knowledge + Documents + UI | COMPLETE | Knowledge base, document management, role-based UI, user management |
 | Phase 5: GUD & Notifications | COMPLETE | Notification system, APScheduler GUD enforcement, polling UI |
 | Phase 6: Analytics | COMPLETE | Metrics dashboard, question trends, automation performance, knowledge coverage |
+| Phase 6.5: Sub-Domain Routing & Org Settings | COMPLETE | Sub-domain management, expert routing, reassignment workflow, department dropdown, org settings |
 | Phase 7: Testing & Docs | NOT STARTED | Unit/integration tests, documentation |
 
 ## Technology Stack
@@ -98,7 +99,7 @@ cd frontend && npm run dev
 ```
 frontend/          React SPA (Business User + Expert + Admin dashboards)
     ↓ Vite proxy (/api → backend:8000)
-backend/           FastAPI (Services: Auth, Questions, Automation, Knowledge, Documents, Users)
+backend/           FastAPI (Services: Auth, Questions, Automation, Knowledge, Documents, Users, SubDomains, OrgSettings)
     ↓
 data tier          PostgreSQL + pgvector, Redis
     ↓
@@ -125,6 +126,7 @@ backend/app/
 │   ├── wisdom.py                    # WisdomFact, WisdomEmbedding, WisdomTier
 │   ├── documents.py                 # KnowledgeDocument, DocumentChunk, ExtractedFactCandidate, Department
 │   ├── notifications.py            # Notification, NotificationType
+│   ├── subdomain.py               # SubDomain, ExpertSubDomainAssignment
 │   └── analytics.py               # DailyMetrics (pre-aggregation, future use)
 ├── api/v1/
 │   ├── health.py                    # /health endpoint
@@ -135,7 +137,9 @@ backend/app/
 │   ├── documents.py                 # Document upload, extraction, GUD, departments
 │   ├── users.py                     # User CRUD, role/status management (admin-only)
 │   ├── notifications.py            # Notification list, read, dismiss, unread count
-│   └── analytics.py               # Overview, trends, automation, knowledge, experts (5 endpoints)
+│   ├── analytics.py               # Overview, trends, automation, knowledge, experts (5 endpoints)
+│   ├── subdomains.py              # Sub-domain CRUD, expert assignment, question routing
+│   └── org_settings.py            # Organization settings (departments, requirements)
 └── services/
     ├── ai_provider_service.py       # Multi-provider AI (Ollama/Anthropic/etc.)
     ├── embedding_service.py         # Embeddings (Ollama → hash fallback)
@@ -145,7 +149,8 @@ backend/app/
     ├── document_expiration_service.py  # GUD enforcement, expiry checks, renewal
     ├── notification_service.py      # Create/read/dismiss notifications, workflow helpers
     ├── scheduler_service.py         # APScheduler daily GUD expiry checks
-    └── analytics_service.py        # On-the-fly metrics computation (overview, trends, automation, knowledge, experts)
+    ├── analytics_service.py        # On-the-fly metrics computation (overview, trends, automation, knowledge, experts)
+    └── subdomain_service.py        # Sub-domain routing, AI classification, SLA monitoring
 ```
 
 ### Frontend File Structure
@@ -153,16 +158,18 @@ backend/app/
 frontend/src/
 ├── App.tsx                          # Role-based routing
 ├── contexts/AuthContext.tsx         # Auth state, isExpert, isAdmin helpers
-├── components/Layout.tsx            # Role-aware navigation + notification bell
+├── components/Layout.tsx            # Two-row header: logo row + nav row, role-aware navigation + notification bell
 ├── components/NotificationBell.tsx  # Bell icon with unread count, dropdown
 ├── lib/api/
 │   ├── client.ts                    # Axios client with auth interceptors
 │   ├── questions.ts                 # Q&A API client
 │   ├── knowledge.ts                 # Knowledge facts API (normalizes backend response shapes)
 │   ├── documents.ts                 # Documents API (upload, extraction, GUD)
-│   ├── users.ts                     # User management API (CRUD, role, status)
+│   ├── users.ts                     # User management API (CRUD, role, status, sub-domain assignment)
 │   ├── notifications.ts            # Notifications API (list, read, dismiss)
-│   └── analytics.ts               # Analytics API (overview, trends, automation, knowledge, experts)
+│   ├── analytics.ts               # Analytics API (overview, trends, automation, knowledge, experts)
+│   ├── subdomains.ts              # Sub-domain CRUD API
+│   └── org.ts                     # Organization settings API (departments, requirements)
 ├── pages/
 │   ├── LoginPage.tsx                # Splash page with hero, login, dev quick-login buttons
 │   ├── user/
@@ -176,7 +183,10 @@ frontend/src/
 │   │   ├── DocumentManagementPage.tsx   # Upload, extraction, candidate review, GUD
 │   │   └── AnalyticsPage.tsx          # Metrics dashboard with recharts (4 tabs, period selector)
 │   ├── admin/
-│   │   └── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate
+│   │   ├── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate, sub-domain assignment
+│   │   ├── SubDomainManagementPage.tsx  # Sub-domain CRUD, expert assignment
+│   │   ├── ReassignmentReviewPage.tsx   # Review and approve/reject reassignment requests
+│   │   └── OrgSettingsPage.tsx      # Department management, question requirements toggle
 │   └── NotificationsPage.tsx        # Full notification list with filters, pagination
 └── styles/globals.css               # Tufte design system
 ```
@@ -200,6 +210,9 @@ frontend/src/
 | SchedulerService | `services/scheduler_service.py` | APScheduler daily GUD expiry checks at 2 AM |
 | Analytics API | `api/v1/analytics.py` | Overview KPIs, question trends, automation stats, knowledge coverage, expert performance |
 | AnalyticsService | `services/analytics_service.py` | On-the-fly metrics from existing tables (no pre-aggregation) |
+| SubDomains API | `api/v1/subdomains.py` | Sub-domain CRUD, expert assignment, question routing |
+| SubDomainService | `services/subdomain_service.py` | AI-based sub-domain classification, SLA monitoring |
+| Org Settings API | `api/v1/org_settings.py` | Organization settings (departments, requirements) |
 | AIProviderService | `services/ai_provider_service.py` | Abstraction over Ollama/Anthropic/Bedrock/Azure |
 
 ### Question Lifecycle
@@ -220,6 +233,18 @@ When a question enters EXPERT_QUEUE or gets HUMAN_REQUESTED, the system runs gap
 3. Stores result in `question.gap_analysis` JSONB field
 4. Expert sees the analysis when viewing the question, with a pre-populated answer they can edit
 
+### Sub-Domain Routing
+```
+1. Admin creates sub-domains (e.g., Contracts, Employment Law, IP)
+2. Admin assigns experts to sub-domains via User Management
+3. User submits question (optionally selects sub-domain, or AI classifies)
+4. Question routed to experts assigned to that sub-domain
+5. Expert can request reassignment ("Not my sub-domain") → admin reviews
+6. SLA monitoring tracks response time per sub-domain
+```
+
+Questions have `subdomain_id` (nullable UUID) and `ai_classified_subdomain` (boolean) fields. The department field (nullable string) is independent of sub-domains.
+
 ### Automation Flow (Expert-Driven)
 ```
 1. Question arrives → checked against automation rules
@@ -233,8 +258,8 @@ When a question enters EXPERT_QUEUE or gets HUMAN_REQUESTED, the system runs gap
 
 ### User Roles & Navigation
 - **business_user**: My Questions, Ask Question
-- **domain_expert**: All above + Expert Dashboard, Queue, Knowledge, Documents
-- **admin**: All above + User Management
+- **domain_expert**: All above + Expert Dashboard, Queue, Knowledge, Documents, Analytics
+- **admin**: All above + Users, Sub-Domains, Reassignments, Settings
 
 ### API Response Shape Normalization
 The frontend API clients normalize backend response shapes:
@@ -250,6 +275,10 @@ Notifications are created automatically at these workflow points:
 - Auto-answer delivered → user notified (`auto_answer_available`)
 - User rejects auto-answer → rule creator notified (`auto_answer_rejected`)
 - Expert requests clarification → user notified (`clarification_requested`)
+- Question routed to sub-domain → assigned experts notified (`question_routed`)
+- SLA breach on question → experts notified (`sla_breach`)
+- Reassignment requested → admins notified (`reassignment_requested`)
+- Reassignment approved/rejected → requester notified (`reassignment_approved`/`reassignment_rejected`)
 - GUD expiry at 30/7/0 days → experts notified (rules, documents, facts)
 - Expired items are automatically deactivated by daily scheduler
 
@@ -274,6 +303,8 @@ These patterns should be followed to avoid regressions:
 8. **Docker file detection**: After creating new frontend files, run `docker-compose restart frontend` for Vite to detect them.
 9. **SQLAlchemy reserved attribute `metadata`**: The `metadata` attribute name is reserved by SQLAlchemy's DeclarativeBase. Use `extra_data` (or similar) for JSONB columns that would otherwise be named `metadata`.
 10. **Tailwind `text-accent` is invisible**: The accent color (`hsl(40 10% 96%)`) is nearly identical to the cream background. Use `text-ink-secondary` or `text-ink-primary` for visible text.
+11. **PostgreSQL enums are not auto-updated**: When adding values to a Python enum (e.g., `NotificationType`), the PostgreSQL enum type must be updated manually with `ALTER TYPE ... ADD VALUE`. `init_db()` does not update existing enum types.
+12. **Existing tables not altered by init_db()**: `Base.metadata.create_all()` only creates new tables. New columns on existing tables require manual `ALTER TABLE ADD COLUMN`.
 
 ## Design System: Tufte-Inspired
 
@@ -331,6 +362,8 @@ Display as scientific illustrations (field guide style). Variants:
 - `ExtractedFactCandidate` - AI-extracted facts pending expert review
 - `Department` - Organization departments for document ownership
 - `Notification` - In-app notifications with type, read status, link URLs, extra_data JSONB
+- `SubDomain` - Named sub-domains within an organization (e.g., Contracts, Employment Law)
+- `ExpertSubDomainAssignment` - Many-to-many junction: which experts cover which sub-domains
 - `DailyMetrics` - Pre-aggregated daily metrics per organization (table exists, not yet populated by scheduler)
 
 ### Vector Search
@@ -394,13 +427,14 @@ For production scale, migrate to native pgvector columns with IVFFlat index.
 - `POST /departments` - Create department
 
 ### Users (`/api/v1/users/`)
-- `GET /` - List users in organization (expert+)
+- `GET /` - List users in organization (expert+), includes sub-domain assignments
 - `GET /{id}` - User detail (expert+)
 - `POST /` - Create user (admin-only)
 - `PUT /{id}` - Edit user details (admin-only)
 - `DELETE /{id}` - Delete user (admin-only, cannot delete self)
 - `PUT /{id}/role` - Update role (admin-only, cannot change own role)
 - `PUT /{id}/status` - Activate/deactivate (admin-only, cannot change own status)
+- `PUT /{id}/subdomains` - Assign sub-domains to user (admin-only)
 
 ### Notifications (`/api/v1/notifications/`)
 - `GET /unread-count` - Unread count (lightweight, for polling every 30s)
@@ -417,6 +451,22 @@ For production scale, migrate to native pgvector columns with IVFFlat index.
 - `GET /experts?period=30d` - Expert leaderboard (questions answered, avg response time, satisfaction)
 
 All analytics endpoints require expert+ role. Period accepts: `7d`, `30d`, `90d`, `all`.
+
+### Sub-Domains (`/api/v1/subdomains/`)
+- `GET /` - List sub-domains (optionally active_only)
+- `POST /` - Create sub-domain (admin-only)
+- `PUT /{id}` - Update sub-domain (admin-only)
+- `DELETE /{id}` - Deactivate sub-domain (admin-only)
+- `POST /{id}/experts` - Assign experts to sub-domain (admin-only)
+- `GET /route/{question_id}` - Route question to best sub-domain (expert+)
+- `POST /{id}/reassign` - Request reassignment to different sub-domain (expert+)
+- `GET /reassignments/pending` - List pending reassignment requests (admin-only)
+- `POST /reassignments/{id}/approve` - Approve reassignment (admin-only)
+- `POST /reassignments/{id}/reject` - Reject reassignment (admin-only)
+
+### Organization Settings (`/api/v1/org/`)
+- `GET /settings` - Get org settings (any authenticated user)
+- `PUT /settings` - Update org settings (admin-only) — departments list, require_department toggle
 
 ### Settings (`/api/v1/settings/`)
 - `GET /ai-provider` - Current AI provider config (expert-only)
@@ -469,3 +519,9 @@ Read these in order for full context:
 10. **Notifications**: Polling-based (30s interval), not WebSocket. APScheduler for daily GUD checks. Notification triggers are non-blocking (try/except) so workflow endpoints never fail due to notification errors.
 11. **Scheduler**: APScheduler runs in-process. For multi-worker production, migrate to Celery + Redis.
 12. **Analytics**: Metrics computed on-the-fly from existing tables (no pre-aggregation). DailyMetrics table exists for future optimization. Charts use recharts with Tufte palette.
+13. **Sub-domain routing**: Questions can be classified to sub-domains manually (user picks) or by AI. Experts are assigned to sub-domains and see only relevant questions in their queue.
+14. **Reassignment workflow**: Experts can request reassignment to a different sub-domain with a reason. Admins approve/reject from the Reassignments page.
+15. **Department on questions**: Optional field, configurable via org settings. When `require_department` is true in org settings, users must select a department before submitting. Stored in `Organization.settings` JSONB.
+16. **Question validation**: Frontend enforces minimum 5-word question length. Submit button disabled until all requirements met.
+17. **Schema changes without Alembic**: When adding columns to existing tables, run `ALTER TABLE ADD COLUMN` manually. When adding PostgreSQL enum values, run `ALTER TYPE ADD VALUE`. The `init_db()` only creates new tables — it does NOT alter existing ones.
+18. **Two-row header layout**: Logo + user info on row 1, nav links on row 2. Prevents overlap when many nav items are present.

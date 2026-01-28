@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { usersApi, UserListItem, UserRole, UserCreateData, UserEditData } from '../../lib/api/users'
+import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
 
 type ModalMode = 'closed' | 'create' | 'edit'
 
@@ -24,9 +25,19 @@ export default function UserManagementPage() {
   // Delete confirmation
   const [deletingUser, setDeletingUser] = useState<UserListItem | null>(null)
 
+  // Sub-domain assignment
+  const [allSubdomains, setAllSubdomains] = useState<SubDomainItem[]>([])
+  const [sdModalUser, setSdModalUser] = useState<UserListItem | null>(null)
+  const [selectedSdIds, setSelectedSdIds] = useState<Set<string>>(new Set())
+  const [isSavingSd, setIsSavingSd] = useState(false)
+
   useEffect(() => {
     loadUsers()
   }, [page, roleFilter])
+
+  useEffect(() => {
+    loadSubdomains()
+  }, [])
 
   const loadUsers = async () => {
     try {
@@ -40,6 +51,15 @@ export default function UserManagementPage() {
       console.error('Failed to load users:', err)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const loadSubdomains = async () => {
+    try {
+      const result = await subdomainsApi.list(true)
+      setAllSubdomains(result.items)
+    } catch {
+      // Sub-domains not available
     }
   }
 
@@ -139,6 +159,37 @@ export default function UserManagementPage() {
     }
   }
 
+  // Sub-domain modal
+  const openSdModal = (user: UserListItem) => {
+    setSdModalUser(user)
+    setSelectedSdIds(new Set(user.subdomain_assignments.map(s => s.id)))
+  }
+
+  const toggleSd = (sdId: string) => {
+    setSelectedSdIds(prev => {
+      const next = new Set(prev)
+      if (next.has(sdId)) next.delete(sdId)
+      else next.add(sdId)
+      return next
+    })
+  }
+
+  const handleSaveSd = async () => {
+    if (!sdModalUser) return
+    setIsSavingSd(true)
+    try {
+      await usersApi.updateSubdomains(sdModalUser.id, Array.from(selectedSdIds))
+      setSdModalUser(null)
+      setSuccess('Sub-domain assignments updated.')
+      await loadUsers()
+      setTimeout(() => setSuccess(''), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update sub-domains')
+    } finally {
+      setIsSavingSd(false)
+    }
+  }
+
   const getRoleStyle = (role: UserRole) => {
     switch (role) {
       case 'admin': return 'text-status-error'
@@ -216,6 +267,9 @@ export default function UserManagementPage() {
                   <th className="text-left py-3 px-4 font-mono text-xs text-ink-tertiary uppercase">Email</th>
                   <th className="text-left py-3 px-4 font-mono text-xs text-ink-tertiary uppercase">Role</th>
                   <th className="text-left py-3 px-4 font-mono text-xs text-ink-tertiary uppercase">Department</th>
+                  {allSubdomains.length > 0 && (
+                    <th className="text-left py-3 px-4 font-mono text-xs text-ink-tertiary uppercase">Sub-Domains</th>
+                  )}
                   <th className="text-left py-3 px-4 font-mono text-xs text-ink-tertiary uppercase">Status</th>
                   {isAdmin && (
                     <th className="text-right py-3 px-4 font-mono text-xs text-ink-tertiary uppercase">Actions</th>
@@ -235,6 +289,31 @@ export default function UserManagementPage() {
                     <td className="py-3 px-4 font-serif text-sm text-ink-secondary">
                       {u.department || '—'}
                     </td>
+                    {allSubdomains.length > 0 && (
+                      <td className="py-3 px-4">
+                        {(u.role === 'domain_expert' || u.role === 'admin') ? (
+                          <div className="flex items-center gap-2">
+                            {u.subdomain_assignments.length > 0 ? (
+                              <span className="font-mono text-xs text-loris-brown">
+                                {u.subdomain_assignments.map(s => s.name).join(', ')}
+                              </span>
+                            ) : (
+                              <span className="font-mono text-xs text-ink-muted">None</span>
+                            )}
+                            {isAdmin && (
+                              <button
+                                onClick={() => openSdModal(u)}
+                                className="font-mono text-[10px] text-ink-secondary hover:text-ink-primary underline ml-1"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="font-mono text-xs text-ink-muted">—</span>
+                        )}
+                      </td>
+                    )}
                     <td className="py-3 px-4">
                       <span className={`font-mono text-xs ${u.is_active ? 'text-status-success' : 'text-status-error'}`}>
                         {u.is_active ? 'Active' : 'Inactive'}
@@ -431,6 +510,54 @@ export default function UserManagementPage() {
                 className="px-4 py-2 bg-status-error text-cream-50 rounded-sm font-mono text-sm hover:opacity-90"
               >
                 Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Domain Assignment Modal */}
+      {sdModalUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-cream-50 rounded-sm shadow-lg p-8 w-full max-w-md border border-rule-light">
+            <h2 className="text-xl text-ink-primary mb-2">Assign Sub-Domains</h2>
+            <p className="font-serif text-sm text-ink-secondary mb-6">
+              Select which sub-domains <strong>{sdModalUser.name}</strong> should handle.
+            </p>
+
+            {allSubdomains.length === 0 ? (
+              <p className="font-serif text-sm text-ink-muted italic mb-6">
+                No sub-domains configured yet. Create sub-domains first.
+              </p>
+            ) : (
+              <div className="space-y-2 mb-6 max-h-60 overflow-y-auto">
+                {allSubdomains.map(sd => (
+                  <label key={sd.id} className="flex items-center gap-3 py-2 px-3 bg-cream-200 rounded-sm cursor-pointer hover:bg-cream-300 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={selectedSdIds.has(sd.id)}
+                      onChange={() => toggleSd(sd.id)}
+                      className="w-4 h-4 accent-loris-brown"
+                    />
+                    <span className="font-serif text-sm text-ink-primary">{sd.name}</span>
+                    {sd.description && (
+                      <span className="font-mono text-[10px] text-ink-tertiary ml-auto">{sd.description}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-rule-light">
+              <button onClick={() => setSdModalUser(null)} className="btn-secondary">
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSd}
+                disabled={isSavingSd}
+                className="btn-primary disabled:opacity-50"
+              >
+                {isSavingSd ? 'Saving...' : 'Save Assignments'}
               </button>
             </div>
           </div>
