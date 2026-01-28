@@ -21,7 +21,7 @@ Core workflow: User asks question → System checks automation rules → If matc
 | Phase 2: Questions | COMPLETE | Full Q&A lifecycle, expert queue, feedback |
 | Phase 3: Automation | COMPLETE | AutomationRule CRUD, embedding matching, auto-answer delivery |
 | Phase 4: Knowledge + Documents + UI | COMPLETE | Knowledge base, document management, role-based UI, user management |
-| Phase 5: GUD & Notifications | NOT STARTED | WebSocket notifications, scheduled expiry checks |
+| Phase 5: GUD & Notifications | COMPLETE | Notification system, APScheduler GUD enforcement, polling UI |
 | Phase 6: Analytics | NOT STARTED | Metrics dashboard, automation performance |
 | Phase 7: Testing & Docs | NOT STARTED | Unit/integration tests, documentation |
 
@@ -123,7 +123,8 @@ backend/app/
 │   ├── answers.py                   # Answer with AnswerSource enum
 │   ├── automation.py                # AutomationRule, Embedding, Log models
 │   ├── wisdom.py                    # WisdomFact, WisdomEmbedding, WisdomTier
-│   └── documents.py                 # KnowledgeDocument, DocumentChunk, ExtractedFactCandidate, Department
+│   ├── documents.py                 # KnowledgeDocument, DocumentChunk, ExtractedFactCandidate, Department
+│   └── notifications.py            # Notification, NotificationType
 ├── api/v1/
 │   ├── health.py                    # /health endpoint
 │   ├── auth.py                      # Register, login, /me, JWT tokens
@@ -131,14 +132,17 @@ backend/app/
 │   ├── automation.py                # CRUD for automation rules
 │   ├── knowledge.py                 # Knowledge facts CRUD, search, stats, gap analysis
 │   ├── documents.py                 # Document upload, extraction, GUD, departments
-│   └── users.py                     # User CRUD, role/status management (admin-only)
+│   ├── users.py                     # User CRUD, role/status management (admin-only)
+│   └── notifications.py            # Notification list, read, dismiss, unread count
 └── services/
     ├── ai_provider_service.py       # Multi-provider AI (Ollama/Anthropic/etc.)
     ├── embedding_service.py         # Embeddings (Ollama → hash fallback)
     ├── automation_service.py        # Matching, auto-answer delivery, metrics
     ├── knowledge_service.py         # Knowledge facts CRUD, semantic search, gap analysis
     ├── document_service.py          # Document upload, parsing, fact extraction
-    └── document_expiration_service.py  # GUD enforcement, expiry checks, renewal
+    ├── document_expiration_service.py  # GUD enforcement, expiry checks, renewal
+    ├── notification_service.py      # Create/read/dismiss notifications, workflow helpers
+    └── scheduler_service.py         # APScheduler daily GUD expiry checks
 ```
 
 ### Frontend File Structure
@@ -146,13 +150,15 @@ backend/app/
 frontend/src/
 ├── App.tsx                          # Role-based routing
 ├── contexts/AuthContext.tsx         # Auth state, isExpert, isAdmin helpers
-├── components/Layout.tsx            # Role-aware navigation
+├── components/Layout.tsx            # Role-aware navigation + notification bell
+├── components/NotificationBell.tsx  # Bell icon with unread count, dropdown
 ├── lib/api/
 │   ├── client.ts                    # Axios client with auth interceptors
 │   ├── questions.ts                 # Q&A API client
 │   ├── knowledge.ts                 # Knowledge facts API (normalizes backend response shapes)
 │   ├── documents.ts                 # Documents API (upload, extraction, GUD)
-│   └── users.ts                     # User management API (CRUD, role, status)
+│   ├── users.ts                     # User management API (CRUD, role, status)
+│   └── notifications.ts            # Notifications API (list, read, dismiss)
 ├── pages/
 │   ├── LoginPage.tsx                # Splash page with hero, login, dev quick-login buttons
 │   ├── user/
@@ -164,8 +170,9 @@ frontend/src/
 │   │   ├── ExpertQuestionDetail.tsx # Question + gap analysis + answer form
 │   │   ├── KnowledgeManagementPage.tsx  # Facts CRUD, search, tier management
 │   │   └── DocumentManagementPage.tsx   # Upload, extraction, candidate review, GUD
-│   └── admin/
-│       └── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate
+│   ├── admin/
+│   │   └── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate
+│   └── NotificationsPage.tsx        # Full notification list with filters, pagination
 └── styles/globals.css               # Tufte design system
 ```
 
@@ -184,6 +191,8 @@ frontend/src/
 | DocumentService | `services/document_service.py` | Document ingestion, parsing (PDF/DOCX/TXT), fact extraction |
 | DocumentExpirationService | `services/document_expiration_service.py` | GUD enforcement, expiry checking, renewal |
 | EmbeddingService | `services/embedding_service.py` | Vector embeddings via Ollama nomic-embed-text |
+| NotificationService | `services/notification_service.py` | Create/manage notifications, workflow helpers |
+| SchedulerService | `services/scheduler_service.py` | APScheduler daily GUD expiry checks at 2 AM |
 | AIProviderService | `services/ai_provider_service.py` | Abstraction over Ollama/Anthropic/Bedrock/Azure |
 
 ### Question Lifecycle
@@ -228,6 +237,22 @@ The frontend API clients normalize backend response shapes:
 
 This translation happens in `frontend/src/lib/api/knowledge.ts` and `documents.ts`.
 
+### Notification Triggers
+Notifications are created automatically at these workflow points:
+- Expert answers a question → user notified (`question_answered`)
+- Auto-answer delivered → user notified (`auto_answer_available`)
+- User rejects auto-answer → rule creator notified (`auto_answer_rejected`)
+- Expert requests clarification → user notified (`clarification_requested`)
+- GUD expiry at 30/7/0 days → experts notified (rules, documents, facts)
+- Expired items are automatically deactivated by daily scheduler
+
+### Scheduler (APScheduler)
+- Daily GUD expiry check at 2:00 AM
+- Runs in the FastAPI process (no extra containers)
+- Checks automation rules, documents, and knowledge facts
+- Creates notifications + deactivates expired items
+- Logs to backend container: `docker logs loris-backend-1 | grep scheduler`
+
 ## Key Bugs Fixed (For Reference)
 
 These patterns should be followed to avoid regressions:
@@ -240,7 +265,8 @@ These patterns should be followed to avoid regressions:
 6. **Registration endpoint**: Returns tokens + user data via `RegisterResponse` schema
 7. **VITE_API_URL must be empty**: Set `VITE_API_URL=` (empty) in docker-compose.yml so all API calls route through the Vite proxy. Setting it to a URL causes split routing between AuthContext and apiClient.
 8. **Docker file detection**: After creating new frontend files, run `docker-compose restart frontend` for Vite to detect them.
-9. **Tailwind `text-accent` is invisible**: The accent color (`hsl(40 10% 96%)`) is nearly identical to the cream background. Use `text-ink-secondary` or `text-ink-primary` for visible text.
+9. **SQLAlchemy reserved attribute `metadata`**: The `metadata` attribute name is reserved by SQLAlchemy's DeclarativeBase. Use `extra_data` (or similar) for JSONB columns that would otherwise be named `metadata`.
+10. **Tailwind `text-accent` is invisible**: The accent color (`hsl(40 10% 96%)`) is nearly identical to the cream background. Use `text-ink-secondary` or `text-ink-primary` for visible text.
 
 ## Design System: Tufte-Inspired
 
@@ -297,6 +323,7 @@ Display as scientific illustrations (field guide style). Variants:
 - `ChunkEmbedding` - Chunk-level embeddings for search
 - `ExtractedFactCandidate` - AI-extracted facts pending expert review
 - `Department` - Organization departments for document ownership
+- `Notification` - In-app notifications with type, read status, link URLs, extra_data JSONB
 
 ### Vector Search
 Currently using JSONB for embedding storage with application-level cosine similarity.
@@ -367,6 +394,13 @@ For production scale, migrate to native pgvector columns with IVFFlat index.
 - `PUT /{id}/role` - Update role (admin-only, cannot change own role)
 - `PUT /{id}/status` - Activate/deactivate (admin-only, cannot change own status)
 
+### Notifications (`/api/v1/notifications/`)
+- `GET /unread-count` - Unread count (lightweight, for polling every 30s)
+- `GET /` - List notifications (paginated, filterable by unread_only)
+- `POST /{id}/read` - Mark single notification as read
+- `POST /read-all` - Mark all as read
+- `DELETE /{id}` - Dismiss notification
+
 ### Settings (`/api/v1/settings/`)
 - `GET /ai-provider` - Current AI provider config (expert-only)
 - `GET /ollama-models` - List available Ollama models (expert-only)
@@ -415,3 +449,5 @@ Read these in order for full context:
 7. **Database reset**: Tables auto-created on backend startup via `init_db()`. No Alembic migrations yet.
 8. **Document parsing**: Supports PDF (pdfplumber), DOCX (python-docx), TXT. Documents are chunked and facts extracted by AI.
 9. **Knowledge tiers**: tier_0a (authoritative), tier_0b (expert-validated), tier_0c (AI-generated), pending, archived.
+10. **Notifications**: Polling-based (30s interval), not WebSocket. APScheduler for daily GUD checks. Notification triggers are non-blocking (try/except) so workflow endpoints never fail due to notification errors.
+11. **Scheduler**: APScheduler runs in-process. For multi-worker production, migrate to Celery + Redis.

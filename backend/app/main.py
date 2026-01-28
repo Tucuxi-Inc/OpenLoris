@@ -9,9 +9,10 @@ from app.core.database import engine, test_connection, init_db
 # Import all models to ensure SQLAlchemy relationships are properly configured
 import app.models  # noqa: F401
 
-from app.api.v1 import health, auth, questions, automation, knowledge, users
+from app.api.v1 import health, auth, questions, automation, knowledge, users, notifications
 from app.api.v1 import documents as documents_api
 from app.api.v1 import settings as settings_api
+from app.services.scheduler_service import scheduler_service
 
 
 @asynccontextmanager
@@ -32,12 +33,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"Database initialization failed: {e}")
 
+    # Start scheduler for GUD expiry checks
+    try:
+        scheduler_service.start()
+        print("Scheduler started successfully")
+    except Exception as e:
+        print(f"Scheduler startup failed: {e}")
+
     print("Loris API started successfully")
 
     yield
 
     # Shutdown
     print("Shutting down Loris API...")
+    try:
+        scheduler_service.stop()
+    except Exception as e:
+        print(f"Scheduler shutdown failed: {e}")
     try:
         await engine.dispose()
     except Exception as e:
@@ -75,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
     app.include_router(documents_api.router, prefix="/api/v1/documents", tags=["documents"])
     app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
+    app.include_router(notifications.router, prefix="/api/v1/notifications", tags=["notifications"])
 
     return app
 

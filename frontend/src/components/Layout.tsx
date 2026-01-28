@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import NotificationBell from './NotificationBell'
 
 export default function Layout() {
   const { user, isExpert, isAdmin, logout } = useAuth()
@@ -101,8 +102,9 @@ export default function Layout() {
               )}
             </nav>
 
-            {/* User menu */}
+            {/* Notifications + User menu */}
             <div className="flex items-center gap-4">
+              <NotificationBell />
               <div className="flex flex-col items-end">
                 <span className="font-mono text-xs text-ink-tertiary">
                   {user?.name}

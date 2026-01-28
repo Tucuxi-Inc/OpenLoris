@@ -13,8 +13,10 @@ from app.models.questions import Question, QuestionStatus, QuestionPriority, Que
 from app.models.answers import Answer, AnswerSource
 from app.models.user import User
 from app.api.v1.auth import get_current_user, get_current_active_expert
+from app.models.automation import AutomationRule
 from app.services.automation_service import automation_service
 from app.services.knowledge_service import knowledge_service
+from app.services.notification_service import notification_service
 
 router = APIRouter()
 
@@ -137,6 +139,17 @@ async def submit_question(
                 match=check_result.match,
             )
             await db.refresh(question)
+            # Notify user of auto-answer
+            try:
+                await notification_service.notify_auto_answer(
+                    db=db,
+                    user_id=current_user.id,
+                    organization_id=current_user.organization_id,
+                    question_id=question.id,
+                    question_text=question_data.text,
+                )
+            except Exception:
+                pass  # Non-blocking
             return QuestionSubmitResponse(
                 question=question,
                 auto_answered=True,
@@ -343,6 +356,25 @@ async def request_human_review(
         rejection_reason=clarification.message,
     )
 
+    # Notify rule creator that auto-answer was rejected
+    try:
+        if question.automation_rule_id:
+            rule_result = await db.execute(
+                select(AutomationRule).where(AutomationRule.id == question.automation_rule_id)
+            )
+            rule = rule_result.scalar_one_or_none()
+            if rule:
+                await notification_service.notify_auto_answer_rejected(
+                    db=db,
+                    expert_id=rule.created_by_id,
+                    organization_id=question.organization_id,
+                    question_id=question.id,
+                    question_text=question.original_text,
+                    rejection_reason=clarification.message,
+                )
+    except Exception:
+        pass  # Non-blocking
+
     # Run gap analysis for the expert who will handle this
     try:
         ka = await knowledge_service.run_gap_analysis(
@@ -482,6 +514,18 @@ async def submit_answer(
     await db.commit()
     await db.refresh(answer)
 
+    # Notify question asker that their question was answered
+    try:
+        await notification_service.notify_question_answered(
+            db=db,
+            user_id=question.asked_by_id,
+            organization_id=question.organization_id,
+            question_id=question.id,
+            question_text=question.original_text,
+        )
+    except Exception:
+        pass  # Non-blocking
+
     return answer
 
 
@@ -516,5 +560,17 @@ async def request_clarification(
     question.status = QuestionStatus.NEEDS_CLARIFICATION
 
     await db.commit()
+
+    # Notify question asker
+    try:
+        await notification_service.notify_clarification_requested(
+            db=db,
+            user_id=question.asked_by_id,
+            organization_id=question.organization_id,
+            question_id=question.id,
+            clarification_text=request.message,
+        )
+    except Exception:
+        pass  # Non-blocking
 
     return {"message": "Clarification requested"}

@@ -11,6 +11,7 @@ from app.models.documents import (
     ExtractedFactCandidate, Department,
     DocumentType, ParsingStatus, ExtractionStatus, ValidationStatus
 )
+from app.models.notifications import Notification, NotificationType
 
 __all__ = [
     "Base",
@@ -42,4 +43,6 @@ __all__ = [
     "ParsingStatus",
     "ExtractionStatus",
     "ValidationStatus",
+    "Notification",
+    "NotificationType",
 ]
