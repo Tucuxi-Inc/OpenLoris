@@ -26,6 +26,11 @@ Core workflow: User asks question → System checks automation rules → If matc
 | Phase 6.5: Sub-Domain Routing & Org Settings | COMPLETE | Sub-domain management, expert routing, reassignment workflow, department dropdown, org settings |
 | Phase 7: Testing & Docs | NOT STARTED | Unit/integration tests, documentation |
 | Phase 8: Turbo Loris + MoltenLoris | COMPLETE | User-controlled fast-answer mode, confidence thresholds, source attribution, MoltenLoris placeholder |
+| Phase 9a: AI Provider Configuration (Backend) | COMPLETE | Encrypted API key storage, org-specific AI config, multi-provider support (Ollama/Anthropic/Bedrock/Azure) |
+| Phase 9b: AI Provider Configuration (Frontend) | COMPLETE | Admin UI for AI provider settings, connection testing, model selection |
+| Phase 10: LorisAvatar Component | COMPLETE | Reusable LorisAvatar component (15 moods, 6 sizes), integrated throughout app for loading/empty/status states |
+| Phase 9c: GDrive via Zapier MCP | PLANNED | Google Drive integration via Zapier MCP (simplified auth, unified access for Web App + MoltenLoris) |
+| Phase 11: MoltenLoris Foundation | PLANNED | Backend support, settings UI, SOUL file generation for Slack agent |
 
 ## Technology Stack
 
@@ -115,7 +120,8 @@ backend/app/
 ├── main.py                          # FastAPI app factory, router registration
 ├── core/
 │   ├── config.py                    # Pydantic settings (ports, AI, JWT, etc.)
-│   └── database.py                  # Async SQLAlchemy engine + session
+│   ├── database.py                  # Async SQLAlchemy engine + session
+│   └── encryption.py                # Fernet encryption for API keys (Phase 9a)
 ├── models/
 │   ├── __init__.py                  # Model registry (import all models here)
 │   ├── base.py                      # Base, UUIDMixin, TimestampMixin
@@ -129,7 +135,8 @@ backend/app/
 │   ├── notifications.py            # Notification, NotificationType
 │   ├── subdomain.py               # SubDomain, ExpertSubDomainAssignment
 │   ├── analytics.py               # DailyMetrics (pre-aggregation, future use)
-│   └── turbo.py                   # TurboAttribution (Phase 8)
+│   ├── turbo.py                   # TurboAttribution (Phase 8)
+│   └── ai_provider.py             # AIProviderConfig, org AI settings (Phase 9a)
 ├── api/v1/
 │   ├── health.py                    # /health endpoint
 │   ├── auth.py                      # Register, login, /me, JWT tokens
@@ -141,7 +148,8 @@ backend/app/
 │   ├── notifications.py            # Notification list, read, dismiss, unread count
 │   ├── analytics.py               # Overview, trends, automation, knowledge, experts (5 endpoints)
 │   ├── subdomains.py              # Sub-domain CRUD, expert assignment, question routing
-│   └── org_settings.py            # Organization settings (departments, requirements)
+│   ├── org_settings.py            # Organization settings (departments, requirements)
+│   └── ai_settings.py             # AI provider configuration endpoints (Phase 9a)
 └── services/
     ├── ai_provider_service.py       # Multi-provider AI (Ollama/Anthropic/etc.)
     ├── embedding_service.py         # Embeddings (Ollama → hash fallback)
@@ -164,6 +172,7 @@ frontend/src/
 ├── components/Layout.tsx            # Two-row header: logo row + nav row, role-aware navigation + notification bell
 ├── components/NotificationBell.tsx  # Bell icon with unread count, dropdown
 ├── components/TurboAnswerCard.tsx   # Turbo answer display with confidence meter (Phase 8)
+├── components/LorisAvatar.tsx       # Reusable Loris mascot (15 moods, 6 sizes) (Phase 10)
 ├── lib/api/
 │   ├── client.ts                    # Axios client with auth interceptors
 │   ├── questions.ts                 # Q&A API client
@@ -173,7 +182,8 @@ frontend/src/
 │   ├── notifications.ts            # Notifications API (list, read, dismiss)
 │   ├── analytics.ts               # Analytics API (overview, trends, automation, knowledge, experts)
 │   ├── subdomains.ts              # Sub-domain CRUD API
-│   └── org.ts                     # Organization settings API (departments, requirements)
+│   ├── org.ts                     # Organization settings API (departments, requirements)
+│   └── aiSettings.ts              # AI provider settings API (Phase 9b)
 ├── pages/
 │   ├── LoginPage.tsx                # Splash page with hero, login, dev quick-login buttons
 │   ├── MoltenLorisPage.tsx          # MoltenLoris coming soon placeholder (Phase 8)
@@ -191,7 +201,8 @@ frontend/src/
 │   │   ├── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate, sub-domain assignment
 │   │   ├── SubDomainManagementPage.tsx  # Sub-domain CRUD, expert assignment
 │   │   ├── ReassignmentReviewPage.tsx   # Review and approve/reject reassignment requests
-│   │   └── OrgSettingsPage.tsx      # Department management, question requirements toggle
+│   │   ├── OrgSettingsPage.tsx      # Department management, question requirements toggle
+│   │   └── AISettingsPage.tsx       # AI provider configuration (Phase 9b)
 │   └── NotificationsPage.tsx        # Full notification list with filters, pagination
 └── styles/globals.css               # Tufte design system
 ```
@@ -220,6 +231,7 @@ frontend/src/
 | Org Settings API | `api/v1/org_settings.py` | Organization settings (departments, requirements, Turbo Loris settings) |
 | AIProviderService | `services/ai_provider_service.py` | Abstraction over Ollama/Anthropic/Bedrock/Azure |
 | TurboService | `services/turbo_service.py` | Turbo Loris confidence calculation, answer generation, attribution tracking |
+| AI Settings API | `api/v1/ai_settings.py` | Org-specific AI provider configuration, encrypted API key storage (Phase 9a) |
 
 ### Question Lifecycle
 ```
@@ -564,3 +576,5 @@ Read these in order for full context:
 18. **Two-row header layout**: Logo + user info on row 1, nav links on row 2. Prevents overlap when many nav items are present.
 19. **Turbo Loris**: User-controlled fast-answer mode. Confidence formula: similarity (40%) + tier quality (30%) + coverage (30%). User selects threshold (50%/75%/90%). TurboAttribution records track which knowledge sources contributed to the answer.
 20. **Phase 8 migration**: Run `migrations/phase8_turbo_loris.sql` to add turbo columns, enum value, and turbo_attributions table. Required for Turbo Loris functionality.
+21. **AI Provider Configuration** (Phase 9): Org-specific AI settings with encrypted API key storage using Fernet. Supports Ollama (local/cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI. Admin UI for provider selection, model configuration, and connection testing.
+22. **LorisAvatar Component** (Phase 10): Reusable component for Loris mascot images with 15 moods (default, turbo, molten, scholar, legal-scholar, thinking, studying, celebration, alert, confused, detective, architect, battle, mediator, traffic-cop) and 6 sizes (xs, sm, md, lg, xl, 2xl). Integrated throughout app for loading states, empty states, and contextual feedback. Includes `LorisWithMessage` helper and `MOOD_SUGGESTIONS` object.

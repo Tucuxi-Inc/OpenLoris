@@ -241,7 +241,8 @@ docker-compose --profile tools up -d
 │   │   │   ├── users.py    # User management (admin)
 │   │   │   ├── subdomains.py # Sub-domain CRUD, routing, reassignment
 │   │   │   ├── org_settings.py # Organization settings
-│   │   │   └── settings.py # AI provider config
+│   │   │   ├── settings.py # AI provider config
+│   │   │   └── ai_settings.py # AI provider configuration (Phase 9)
 │   │   ├── models/         # SQLAlchemy models (18 tables)
 │   │   ├── services/       # Business logic
 │   │   │   ├── analytics_service.py    # Metrics computation
@@ -257,12 +258,12 @@ docker-compose --profile tools up -d
 │   └── Dockerfile
 ├── frontend/               # React application
 │   └── src/
-│       ├── components/     # Layout, NotificationBell
+│       ├── components/     # Layout, NotificationBell, LorisAvatar
 │       ├── contexts/       # Auth state
 │       ├── pages/          # User, Expert, Admin, Notifications
 │       │   ├── user/       # Dashboard, QuestionDetail
 │       │   ├── expert/     # Dashboard, Queue, Knowledge, Documents, Analytics
-│       │   └── admin/      # UserManagement, SubDomains, Reassignments, OrgSettings
+│       │   └── admin/      # UserManagement, SubDomains, Reassignments, OrgSettings, AISettings
 │       ├── lib/api/        # API clients (questions, knowledge, documents, analytics, etc.)
 │       └── styles/         # Tufte design system
 ├── database/               # init.sql (pgvector extension)
@@ -313,6 +314,11 @@ Edit `.env` to switch AI providers:
 | Phase 6: Analytics | Complete | Metrics dashboard, question trends, automation performance |
 | Phase 6.5: Sub-Domain Routing & Org Settings | Complete | Sub-domains, expert routing, reassignment, departments, org settings |
 | Phase 8: Turbo Loris | Complete | User-controlled fast-answer mode with confidence thresholds, MoltenLoris placeholder |
+| Phase 9a: AI Provider Backend | Complete | Encrypted API key storage, org-specific AI config, multi-provider support |
+| Phase 9b: AI Provider Frontend | Complete | Admin UI for AI provider settings, connection testing, model selection |
+| Phase 10: LorisAvatar | Complete | Reusable Loris mascot component (15 moods, 6 sizes), integrated throughout app |
+| Phase 9c: GDrive via Zapier MCP | Planned | Google Drive integration via Zapier MCP for unified access |
+| Phase 11: MoltenLoris Foundation | Planned | Backend support, settings UI, SOUL file generation for Slack agent |
 | Phase 7: Testing & Docs | Not started | Unit/integration tests, Alembic migrations |
 
 ## Documentation
@@ -325,6 +331,8 @@ See `docs/loris-planning/` for detailed planning documents:
 - [API Specification](docs/loris-planning/05-API-SPECIFICATION.md)
 - [Automation Workflow](docs/loris-planning/06-AUTOMATION-WORKFLOW.md)
 - [Migration Strategy](docs/loris-planning/08-MIGRATION-STRATEGY.md)
+- [GDrive & MoltenLoris Planning](docs/loris-planning/10-GDRIVE-AND-MOLTENLORIS.md)
+- [SOUL Template (MoltenLoris behavior)](docs/loris-planning/SOUL-TEMPLATE.md)
 
 ## License
 
