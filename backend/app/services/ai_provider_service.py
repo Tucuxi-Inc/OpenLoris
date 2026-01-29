@@ -10,6 +10,11 @@ Supports:
 Enterprise users can keep all confidential/privileged information local or within
 controlled cloud environments where data is not shared with third parties.
 
+Configuration Priority:
+1. Organization settings (stored in DB, encrypted API keys)
+2. Environment variables (.env file)
+3. Default values
+
 Ollama cloud models (e.g. qwen3-vl:235b-cloud, gpt-oss:120b-cloud) offer a good
 middle ground: traffic to Ollama is encrypted and they don't store prompts/outputs,
 but the models run on Ollama's infrastructure so they work on any machine regardless
@@ -18,12 +23,16 @@ of local GPU capacity.
 
 import logging
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 from enum import Enum
 from dataclasses import dataclass
 import httpx
 
 from app.core.config import settings
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from uuid import UUID
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +53,9 @@ class AIConfig:
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     region: Optional[str] = None  # For AWS Bedrock
+    azure_endpoint: Optional[str] = None  # For Azure OpenAI
+    azure_deployment: Optional[str] = None  # For Azure OpenAI
+    fallback_model: Optional[str] = None  # Fallback model for Ollama
     max_tokens: int = 4096
     temperature: float = 0.7
     log_prompts: bool = False
@@ -71,8 +83,117 @@ class AIProviderService:
         self._client = None
         logger.info(f"AI Provider initialized: {self.config.provider.value} with model {self.config.model}")
 
+    @classmethod
+    async def for_organization(
+        cls,
+        organization_id: "UUID",
+        db: "AsyncSession"
+    ) -> "AIProviderService":
+        """
+        Get an AI provider service configured for a specific organization.
+
+        Loads settings from the organization's stored configuration,
+        falling back to environment variables for missing values.
+
+        Args:
+            organization_id: The organization's UUID
+            db: Database session
+
+        Returns:
+            AIProviderService configured for the organization
+        """
+        from sqlalchemy import select
+        from app.models.organization import Organization
+        from app.core.encryption import decrypt_value
+
+        result = await db.execute(
+            select(Organization).where(Organization.id == organization_id)
+        )
+        org = result.scalar_one_or_none()
+
+        if not org:
+            logger.warning(f"Organization {organization_id} not found, using default config")
+            return cls()
+
+        org_settings = org.settings or {}
+        ai_settings = org_settings.get("ai_provider", {})
+
+        if not ai_settings:
+            # No org-specific settings, use defaults
+            return cls()
+
+        # Build config from org settings with env fallbacks
+        provider_str = ai_settings.get("provider", getattr(settings, 'AI_PROVIDER', 'local_ollama'))
+
+        try:
+            provider = AIProvider(provider_str)
+        except ValueError:
+            logger.warning(f"Unknown AI provider '{provider_str}', defaulting to local_ollama")
+            provider = AIProvider.LOCAL_OLLAMA
+
+        # Get model
+        model = ai_settings.get("model")
+        if not model:
+            model = cls._get_default_model_static(provider)
+
+        # Decrypt API keys
+        anthropic_key = None
+        azure_key = None
+
+        if ai_settings.get("anthropic_api_key_encrypted"):
+            try:
+                anthropic_key = decrypt_value(ai_settings["anthropic_api_key_encrypted"])
+            except ValueError:
+                logger.warning("Failed to decrypt Anthropic API key for org")
+
+        if ai_settings.get("azure_api_key_encrypted"):
+            try:
+                azure_key = decrypt_value(ai_settings["azure_api_key_encrypted"])
+            except ValueError:
+                logger.warning("Failed to decrypt Azure API key for org")
+
+        # Fall back to env vars if org doesn't have keys set
+        if provider == AIProvider.CLOUD_ANTHROPIC and not anthropic_key:
+            anthropic_key = getattr(settings, 'ANTHROPIC_API_KEY', None)
+
+        if provider == AIProvider.CLOUD_AZURE and not azure_key:
+            azure_key = getattr(settings, 'AZURE_OPENAI_KEY', None)
+
+        # Build config
+        config = AIConfig(
+            provider=provider,
+            model=model,
+            api_key=anthropic_key,
+            base_url=ai_settings.get("ollama_url") or getattr(settings, 'OLLAMA_URL', 'http://host.docker.internal:11434'),
+            region=ai_settings.get("aws_region") or getattr(settings, 'AWS_REGION', 'us-east-1'),
+            azure_endpoint=ai_settings.get("azure_endpoint") or getattr(settings, 'AZURE_OPENAI_ENDPOINT', None),
+            azure_deployment=ai_settings.get("azure_deployment") or getattr(settings, 'AZURE_OPENAI_DEPLOYMENT', None),
+            fallback_model=ai_settings.get("ollama_fallback_model") or getattr(settings, 'OLLAMA_FALLBACK_MODEL', None),
+            max_tokens=ai_settings.get("max_tokens", getattr(settings, 'AI_MAX_TOKENS', 4096)),
+            temperature=ai_settings.get("temperature", getattr(settings, 'AI_TEMPERATURE', 0.7)),
+            log_prompts=getattr(settings, 'AI_LOG_PROMPTS', False),
+            log_responses=getattr(settings, 'AI_LOG_RESPONSES', False),
+        )
+
+        # For Azure, set the API key in a way we can access it
+        if provider == AIProvider.CLOUD_AZURE:
+            config.api_key = azure_key
+
+        return cls(config)
+
+    @staticmethod
+    def _get_default_model_static(provider: AIProvider) -> str:
+        """Get default model for each provider (static version)."""
+        defaults = {
+            AIProvider.LOCAL_OLLAMA: "qwen3-vl:235b-cloud",
+            AIProvider.CLOUD_ANTHROPIC: "claude-sonnet-4-20250514",
+            AIProvider.CLOUD_BEDROCK: "anthropic.claude-3-sonnet-20240229-v1:0",
+            AIProvider.CLOUD_AZURE: "gpt-4"
+        }
+        return defaults.get(provider, "qwen3-vl:235b-cloud")
+
     def _load_config_from_settings(self) -> AIConfig:
-        """Load AI configuration from application settings."""
+        """Load AI configuration from application settings (environment variables)."""
         provider_str = getattr(settings, 'AI_PROVIDER', 'local_ollama')
 
         try:
@@ -94,6 +215,9 @@ class AIProviderService:
             api_key=getattr(settings, 'ANTHROPIC_API_KEY', None),
             base_url=getattr(settings, 'AI_BASE_URL', None) or getattr(settings, 'OLLAMA_URL', 'http://localhost:11434'),
             region=getattr(settings, 'AWS_REGION', 'us-east-1'),
+            azure_endpoint=getattr(settings, 'AZURE_OPENAI_ENDPOINT', None),
+            azure_deployment=getattr(settings, 'AZURE_OPENAI_DEPLOYMENT', None),
+            fallback_model=getattr(settings, 'OLLAMA_FALLBACK_MODEL', None),
             max_tokens=getattr(settings, 'AI_MAX_TOKENS', 4096),
             temperature=getattr(settings, 'AI_TEMPERATURE', 0.7),
             log_prompts=getattr(settings, 'AI_LOG_PROMPTS', False),
@@ -102,13 +226,7 @@ class AIProviderService:
 
     def _get_default_model(self, provider: AIProvider) -> str:
         """Get default model for each provider."""
-        defaults = {
-            AIProvider.LOCAL_OLLAMA: "qwen3-vl:235b-cloud",
-            AIProvider.CLOUD_ANTHROPIC: "claude-sonnet-4-20250514",
-            AIProvider.CLOUD_BEDROCK: "anthropic.claude-3-sonnet-20240229-v1:0",
-            AIProvider.CLOUD_AZURE: "gpt-4"
-        }
-        return defaults.get(provider, "qwen3-vl:235b-cloud")
+        return self._get_default_model_static(provider)
 
     async def generate(
         self,
@@ -165,7 +283,7 @@ class AIProviderService:
         """Generate using Ollama server (local or cloud models).
 
         Tries the configured primary model first, then falls back to
-        OLLAMA_FALLBACK_MODEL if the primary is unavailable.
+        the fallback model if the primary is unavailable.
         """
         base_url = self.config.base_url or "http://localhost:11434"
 
@@ -174,7 +292,8 @@ class AIProviderService:
             full_prompt = f"{system_prompt}\n\n{prompt}"
 
         models_to_try = [self.config.model]
-        fallback = getattr(settings, 'OLLAMA_FALLBACK_MODEL', None)
+        # Use config fallback first, then env fallback
+        fallback = self.config.fallback_model or getattr(settings, 'OLLAMA_FALLBACK_MODEL', None)
         if fallback and fallback != self.config.model:
             models_to_try.append(fallback)
 
@@ -186,7 +305,7 @@ class AIProviderService:
                 "stream": False,
                 "options": {
                     "num_predict": max_tokens or self.config.max_tokens,
-                    "temperature": temperature or self.config.temperature
+                    "temperature": temperature if temperature is not None else self.config.temperature
                 }
             }
             try:
@@ -205,12 +324,12 @@ class AIProviderService:
         raise last_error or RuntimeError("All Ollama models failed")
 
     @staticmethod
-    async def list_ollama_models() -> List[Dict[str, Any]]:
+    async def list_ollama_models(ollama_url: Optional[str] = None) -> List[Dict[str, Any]]:
         """List models available on the connected Ollama instance."""
-        ollama_url = getattr(settings, 'OLLAMA_URL', 'http://host.docker.internal:11434')
+        url = ollama_url or getattr(settings, 'OLLAMA_URL', 'http://host.docker.internal:11434')
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{ollama_url}/api/tags")
+                response = await client.get(f"{url}/api/tags")
                 response.raise_for_status()
                 data = response.json()
                 return data.get("models", [])
@@ -228,7 +347,7 @@ class AIProviderService:
     ) -> str:
         """Generate using Anthropic Claude API directly."""
         if not self.config.api_key:
-            raise ValueError("ANTHROPIC_API_KEY required for cloud_anthropic provider")
+            raise ValueError("API key required for cloud_anthropic provider")
 
         headers = {
             "anthropic-version": "2024-10-22",
@@ -321,12 +440,13 @@ class AIProviderService:
         temperature: Optional[float]
     ) -> str:
         """Generate using Azure OpenAI."""
-        azure_endpoint = getattr(settings, 'AZURE_OPENAI_ENDPOINT', None)
-        azure_key = getattr(settings, 'AZURE_OPENAI_KEY', None)
-        deployment_name = getattr(settings, 'AZURE_OPENAI_DEPLOYMENT', self.config.model)
+        # Use config values first, fall back to env vars
+        azure_endpoint = self.config.azure_endpoint or getattr(settings, 'AZURE_OPENAI_ENDPOINT', None)
+        azure_key = self.config.api_key or getattr(settings, 'AZURE_OPENAI_KEY', None)
+        deployment_name = self.config.azure_deployment or getattr(settings, 'AZURE_OPENAI_DEPLOYMENT', self.config.model)
 
         if not azure_endpoint or not azure_key:
-            raise ValueError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_KEY required for cloud_azure provider")
+            raise ValueError("Azure endpoint and API key required for cloud_azure provider")
 
         headers = {
             "api-key": azure_key,
@@ -341,7 +461,7 @@ class AIProviderService:
         payload = {
             "messages": messages,
             "max_tokens": max_tokens or self.config.max_tokens,
-            "temperature": temperature or self.config.temperature
+            "temperature": temperature if temperature is not None else self.config.temperature
         }
 
         url = f"{azure_endpoint}/openai/deployments/{deployment_name}/chat/completions?api-version=2024-02-15-preview"
@@ -507,5 +627,6 @@ Return ONLY valid JSON."""
         return levels.get(self.config.provider, "unknown")
 
 
-# Global service instance - configured from settings
+# Global service instance - configured from settings (env vars)
+# For org-specific config, use AIProviderService.for_organization()
 ai_provider_service = AIProviderService()

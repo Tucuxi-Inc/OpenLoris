@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { orgApi, OrgSettings } from '../../lib/api/org'
+import AIProviderSettingsPanel from '../../components/settings/AIProviderSettings'
 
 export default function OrgSettingsPage() {
   const [settings, setSettings] = useState<OrgSettings | null>(null)
@@ -83,7 +84,7 @@ export default function OrgSettingsPage() {
       <div className="mb-8">
         <h1 className="text-3xl text-ink-primary mb-2">Organization Settings</h1>
         <p className="font-serif text-ink-secondary">
-          Configure departments, question requirements, and other organization-wide settings.
+          Configure departments, AI providers, and other organization-wide settings.
         </p>
       </div>
 
@@ -97,6 +98,11 @@ export default function OrgSettingsPage() {
           <p className="font-serif text-sm text-status-success">{success}</p>
         </div>
       )}
+
+      {/* AI Provider Settings */}
+      <div className="mb-6">
+        <AIProviderSettingsPanel />
+      </div>
 
       {/* Departments */}
       <div className="card-tufte mb-6">
@@ -171,14 +177,14 @@ export default function OrgSettingsPage() {
         </label>
       </div>
 
-      {/* Save */}
+      {/* Save Department Settings */}
       <div className="flex items-center gap-4">
         <button
           onClick={handleSave}
           disabled={isSaving || !hasChanges}
           className="btn-primary disabled:opacity-50"
         >
-          {isSaving ? 'Saving...' : 'Save Settings'}
+          {isSaving ? 'Saving...' : 'Save Department Settings'}
         </button>
         {hasChanges && (
           <span className="font-mono text-xs text-status-warning">Unsaved changes</span>
