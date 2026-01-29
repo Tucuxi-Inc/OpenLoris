@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { questionsApi, Question, TurboAttribution } from '../../lib/api/questions'
 import TurboAnswerCard from '../../components/TurboAnswerCard'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function QuestionDetailPage() {
   const { questionId } = useParams<{ questionId: string }>()
@@ -110,6 +111,7 @@ export default function QuestionDetailPage() {
   if (isLoading) {
     return (
       <div className="card-tufte text-center py-12">
+        <LorisAvatar mood="thinking" size="lg" animate className="mx-auto mb-4" />
         <p className="font-serif text-ink-secondary">Loading...</p>
       </div>
     )
@@ -118,6 +120,7 @@ export default function QuestionDetailPage() {
   if (error || !question) {
     return (
       <div className="card-tufte text-center py-12">
+        <LorisAvatar mood="confused" size="lg" className="mx-auto mb-4" />
         <p className="font-serif text-status-error mb-4">{error || 'Question not found'}</p>
         <button onClick={() => navigate('/dashboard')} className="btn-secondary">
           Back to Dashboard
@@ -326,6 +329,11 @@ export default function QuestionDetailPage() {
       {['expert_queue', 'in_progress', 'human_requested'].includes(question.status) && (
         <div className="card-tufte mb-8">
           <div className="text-center py-6">
+            <LorisAvatar
+              mood={question.status === 'in_progress' ? 'studying' : 'traffic-cop'}
+              size="lg"
+              className="mx-auto mb-4"
+            />
             <p className="font-serif text-ink-secondary">
               {question.status === 'expert_queue'
                 ? 'Your question is in the expert queue. Our team is working through questions in order of priority.'

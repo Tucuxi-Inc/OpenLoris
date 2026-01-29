@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { questionsApi, Question, QuestionPriority } from '../../lib/api/questions'
 import { knowledgeApi, KnowledgeStats } from '../../lib/api/knowledge'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function ExpertDashboard() {
   const { user } = useAuth()
@@ -48,6 +49,7 @@ export default function ExpertDashboard() {
   if (isLoading) {
     return (
       <div className="card-tufte text-center py-12">
+        <LorisAvatar mood="thinking" size="lg" animate className="mx-auto mb-4" />
         <p className="font-serif text-ink-secondary">Loading dashboard...</p>
       </div>
     )
@@ -124,6 +126,7 @@ export default function ExpertDashboard() {
             </div>
           ) : (
             <div className="card-tufte text-center py-8">
+              <LorisAvatar mood="celebration" size="md" className="mx-auto mb-3" />
               <p className="font-serif text-ink-secondary">Queue is empty. Great work!</p>
             </div>
           )}
@@ -164,6 +167,7 @@ export default function ExpertDashboard() {
               </div>
             ) : (
               <div className="text-center py-6">
+                <LorisAvatar mood="scholar" size="md" className="mx-auto mb-3" />
                 <p className="font-serif text-ink-secondary mb-3">No knowledge facts yet.</p>
                 <Link to="/expert/knowledge" className="btn-secondary inline-block text-sm">
                   Create First Fact

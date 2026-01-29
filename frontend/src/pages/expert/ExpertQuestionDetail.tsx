@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { questionsApi, Question } from '../../lib/api/questions'
 import { knowledgeApi } from '../../lib/api/knowledge'
 import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function ExpertQuestionDetail() {
   const { questionId } = useParams<{ questionId: string }>()
@@ -138,7 +139,8 @@ export default function ExpertQuestionDetail() {
   if (isLoading) {
     return (
       <div className="card-tufte text-center py-12">
-        <p className="font-serif text-ink-secondary">Loading...</p>
+        <LorisAvatar mood="studying" size="lg" animate className="mx-auto mb-4" />
+        <p className="font-serif text-ink-secondary">Loading question...</p>
       </div>
     )
   }
@@ -146,6 +148,7 @@ export default function ExpertQuestionDetail() {
   if (!question) {
     return (
       <div className="card-tufte text-center py-12">
+        <LorisAvatar mood="confused" size="lg" className="mx-auto mb-4" />
         <p className="font-serif text-status-error mb-4">{error || 'Question not found'}</p>
         <button onClick={() => navigate('/expert/queue')} className="btn-secondary">
           Back to Queue

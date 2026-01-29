@@ -1,4 +1,5 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || ''
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string>
@@ -16,9 +17,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   // Add auth header
   const token = localStorage.getItem('access_token')
-  const headers: HeadersInit = {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...fetchOptions.headers,
+    ...(fetchOptions.headers as Record<string, string>),
   }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`

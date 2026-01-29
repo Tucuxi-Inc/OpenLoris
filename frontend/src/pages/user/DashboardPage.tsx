@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { questionsApi, Question, QuestionStatus } from '../../lib/api/questions'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function DashboardPage() {
   const { user } = useAuth()
@@ -95,6 +96,7 @@ export default function DashboardPage() {
 
       {isLoading ? (
         <div className="card-tufte text-center py-12">
+          <LorisAvatar mood="thinking" size="lg" animate className="mx-auto mb-4" />
           <p className="font-serif text-ink-secondary">Loading questions...</p>
         </div>
       ) : (
@@ -182,6 +184,7 @@ export default function DashboardPage() {
           {/* Empty state */}
           {questions.length === 0 && (
             <div className="card-tufte text-center py-12">
+              <LorisAvatar mood="default" size="lg" className="mx-auto mb-4" />
               <p className="font-serif text-ink-secondary mb-4">
                 You haven't asked any questions yet.
               </p>

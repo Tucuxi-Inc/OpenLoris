@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { documentsApi, KnowledgeDocument, ExtractedFactCandidate } from '../../lib/api/documents'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function DocumentManagementPage() {
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([])
@@ -114,7 +115,7 @@ export default function DocumentManagementPage() {
     const newDate = prompt('New good-until date (YYYY-MM-DD):')
     if (!newDate) return
     try {
-      await documentsApi.extendGud(docId, { good_until_date: newDate })
+      await documentsApi.extendGud(docId, { new_good_until_date: newDate })
       await loadDocuments()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to extend')
@@ -272,7 +273,8 @@ export default function DocumentManagementPage() {
         <div>
           {isLoading ? (
             <div className="card-tufte text-center py-12">
-              <p className="font-serif text-ink-secondary">Loading...</p>
+              <LorisAvatar mood="detective" size="lg" animate className="mx-auto mb-4" />
+              <p className="font-serif text-ink-secondary">Loading documents...</p>
             </div>
           ) : documents.length > 0 ? (
             <div className="space-y-3">
@@ -330,6 +332,7 @@ export default function DocumentManagementPage() {
             </div>
           ) : (
             <div className="card-tufte text-center py-12">
+              <LorisAvatar mood="studying" size="lg" className="mx-auto mb-4" />
               <p className="font-serif text-ink-secondary mb-4">No documents uploaded yet.</p>
               <button onClick={() => setShowUpload(true)} className="btn-secondary">
                 Upload First Document
@@ -466,6 +469,7 @@ export default function DocumentManagementPage() {
             </div>
           ) : (
             <div className="card-tufte text-center py-12">
+              <LorisAvatar mood="architect" size="lg" className="mx-auto mb-4" />
               <p className="font-serif text-ink-secondary">
                 Select a document to view details and manage extracted facts.
               </p>

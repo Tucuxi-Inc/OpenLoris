@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import LorisAvatar from '../components/LorisAvatar'
 
 // Dev-only quick login accounts (remove for production)
 const DEV_ACCOUNTS = [
@@ -80,11 +81,7 @@ export default function LoginPage() {
       <div className="min-h-screen flex flex-col items-center justify-center px-4">
         {/* Hero section */}
         <div className="text-center mb-10 max-w-lg">
-          <img
-            src="/loris-images/Loris.png"
-            alt="Loris"
-            className="h-36 w-auto mx-auto mb-6"
-          />
+          <LorisAvatar mood="default" size="xl" className="mx-auto mb-6" />
           <h1 className="font-serif text-5xl text-ink-primary mb-3">Loris</h1>
           <p className="font-serif text-xl text-ink-secondary leading-relaxed mb-4">
             Have a question? Get a definitive answer from Loris.

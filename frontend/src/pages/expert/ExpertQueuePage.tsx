@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { questionsApi, Question, QuestionPriority } from '../../lib/api/questions'
 import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function ExpertQueuePage() {
   const navigate = useNavigate()
@@ -9,7 +10,7 @@ export default function ExpertQueuePage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
-  const [categoryFilter, setCategoryFilter] = useState('')
+  const [categoryFilter] = useState('')
   const [subdomainFilter, setSubdomainFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState<QuestionPriority | ''>('')
   const [subdomains, setSubdomains] = useState<SubDomainItem[]>([])
@@ -126,6 +127,7 @@ export default function ExpertQueuePage() {
 
       {isLoading ? (
         <div className="card-tufte text-center py-12">
+          <LorisAvatar mood="thinking" size="lg" animate className="mx-auto mb-4" />
           <p className="font-serif text-ink-secondary">Loading queue...</p>
         </div>
       ) : (
@@ -227,6 +229,7 @@ export default function ExpertQueuePage() {
           {/* Empty state */}
           {questions.length === 0 && (
             <div className="card-tufte text-center py-12">
+              <LorisAvatar mood="celebration" size="lg" className="mx-auto mb-4" />
               <p className="font-serif text-ink-secondary">
                 No questions in the queue. Great work!
               </p>

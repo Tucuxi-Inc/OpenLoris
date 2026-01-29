@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
 import { orgApi, OrgSettings } from '../../lib/api/org'
 import { questionsApi } from '../../lib/api/questions'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function AskQuestionPage() {
   const [question, setQuestion] = useState('')
@@ -206,13 +207,16 @@ export default function AskQuestionPage() {
                   onChange={() => setTurboMode(true)}
                   className="mt-1"
                 />
-                <div>
-                  <span className="font-serif text-ink-primary flex items-center gap-2">
-                    <span className="text-status-warning">*</span> Turbo Loris
-                  </span>
-                  <p className="font-mono text-[10px] text-ink-tertiary mt-0.5">
-                    Instant AI answer if confidence meets your threshold
-                  </p>
+                <div className="flex items-center gap-3">
+                  <LorisAvatar mood="turbo" size="sm" />
+                  <div>
+                    <span className="font-serif text-ink-primary flex items-center gap-2">
+                      Turbo Loris
+                    </span>
+                    <p className="font-mono text-[10px] text-ink-tertiary mt-0.5">
+                      Instant AI answer if confidence meets your threshold
+                    </p>
+                  </div>
                 </div>
               </label>
             </div>

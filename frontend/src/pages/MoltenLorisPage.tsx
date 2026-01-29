@@ -1,11 +1,9 @@
+import LorisAvatar from '../components/LorisAvatar'
+
 export default function MoltenLorisPage() {
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">
-      <img
-        src="/loris-images/Molten_Loris.png"
-        alt="MoltenLoris"
-        className="h-64 w-auto mb-8"
-      />
+      <LorisAvatar mood="molten" size="2xl" className="mb-8" />
 
       <h1 className="text-4xl font-serif text-ink-primary mb-4">
         MoltenLoris

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { notificationsApi, Notification } from '../lib/api/notifications'
+import LorisAvatar from '../components/LorisAvatar'
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -124,10 +125,12 @@ export default function NotificationsPage() {
       {/* List */}
       {loading ? (
         <div className="text-center py-12">
+          <LorisAvatar mood="thinking" size="lg" animate className="mx-auto mb-4" />
           <p className="font-mono text-sm text-ink-tertiary">Loading notifications...</p>
         </div>
       ) : notifications.length === 0 ? (
         <div className="text-center py-12">
+          <LorisAvatar mood="default" size="lg" className="mx-auto mb-4" />
           <p className="font-serif text-ink-secondary">
             {unreadOnly ? 'No unread notifications' : 'No notifications yet'}
           </p>

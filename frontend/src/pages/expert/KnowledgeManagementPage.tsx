@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { knowledgeApi, WisdomFact, WisdomTier, FactCreate, SearchResult, KnowledgeStats } from '../../lib/api/knowledge'
+import LorisAvatar from '../../components/LorisAvatar'
 
 export default function KnowledgeManagementPage() {
   const [facts, setFacts] = useState<WisdomFact[]>([])
@@ -343,6 +344,7 @@ export default function KnowledgeManagementPage() {
       {!searchResults && (
         isLoading ? (
           <div className="card-tufte text-center py-12">
+            <LorisAvatar mood="studying" size="lg" animate className="mx-auto mb-4" />
             <p className="font-serif text-ink-secondary">Loading facts...</p>
           </div>
         ) : (
@@ -442,6 +444,7 @@ export default function KnowledgeManagementPage() {
 
             {facts.length === 0 && (
               <div className="card-tufte text-center py-12">
+                <LorisAvatar mood="scholar" size="lg" className="mx-auto mb-4" />
                 <p className="font-serif text-ink-secondary mb-4">
                   No knowledge facts yet.
                 </p>
