@@ -25,6 +25,7 @@ Core workflow: User asks question → System checks automation rules → If matc
 | Phase 6: Analytics | COMPLETE | Metrics dashboard, question trends, automation performance, knowledge coverage |
 | Phase 6.5: Sub-Domain Routing & Org Settings | COMPLETE | Sub-domain management, expert routing, reassignment workflow, department dropdown, org settings |
 | Phase 7: Testing & Docs | NOT STARTED | Unit/integration tests, documentation |
+| Phase 8: Turbo Loris + MoltenLoris | COMPLETE | User-controlled fast-answer mode, confidence thresholds, source attribution, MoltenLoris placeholder |
 
 ## Technology Stack
 
@@ -127,7 +128,8 @@ backend/app/
 │   ├── documents.py                 # KnowledgeDocument, DocumentChunk, ExtractedFactCandidate, Department
 │   ├── notifications.py            # Notification, NotificationType
 │   ├── subdomain.py               # SubDomain, ExpertSubDomainAssignment
-│   └── analytics.py               # DailyMetrics (pre-aggregation, future use)
+│   ├── analytics.py               # DailyMetrics (pre-aggregation, future use)
+│   └── turbo.py                   # TurboAttribution (Phase 8)
 ├── api/v1/
 │   ├── health.py                    # /health endpoint
 │   ├── auth.py                      # Register, login, /me, JWT tokens
@@ -150,7 +152,8 @@ backend/app/
     ├── notification_service.py      # Create/read/dismiss notifications, workflow helpers
     ├── scheduler_service.py         # APScheduler daily GUD expiry checks
     ├── analytics_service.py        # On-the-fly metrics computation (overview, trends, automation, knowledge, experts)
-    └── subdomain_service.py        # Sub-domain routing, AI classification, SLA monitoring
+    ├── subdomain_service.py        # Sub-domain routing, AI classification, SLA monitoring
+    └── turbo_service.py            # Turbo Loris confidence calculation, answer generation (Phase 8)
 ```
 
 ### Frontend File Structure
@@ -160,6 +163,7 @@ frontend/src/
 ├── contexts/AuthContext.tsx         # Auth state, isExpert, isAdmin helpers
 ├── components/Layout.tsx            # Two-row header: logo row + nav row, role-aware navigation + notification bell
 ├── components/NotificationBell.tsx  # Bell icon with unread count, dropdown
+├── components/TurboAnswerCard.tsx   # Turbo answer display with confidence meter (Phase 8)
 ├── lib/api/
 │   ├── client.ts                    # Axios client with auth interceptors
 │   ├── questions.ts                 # Q&A API client
@@ -172,6 +176,7 @@ frontend/src/
 │   └── org.ts                     # Organization settings API (departments, requirements)
 ├── pages/
 │   ├── LoginPage.tsx                # Splash page with hero, login, dev quick-login buttons
+│   ├── MoltenLorisPage.tsx          # MoltenLoris coming soon placeholder (Phase 8)
 │   ├── user/
 │   │   ├── DashboardPage.tsx        # Business user dashboard (wired to API)
 │   │   └── QuestionDetailPage.tsx   # Question detail with auto-answer accept/reject, feedback
@@ -212,19 +217,38 @@ frontend/src/
 | AnalyticsService | `services/analytics_service.py` | On-the-fly metrics from existing tables (no pre-aggregation) |
 | SubDomains API | `api/v1/subdomains.py` | Sub-domain CRUD, expert assignment, question routing |
 | SubDomainService | `services/subdomain_service.py` | AI-based sub-domain classification, SLA monitoring |
-| Org Settings API | `api/v1/org_settings.py` | Organization settings (departments, requirements) |
+| Org Settings API | `api/v1/org_settings.py` | Organization settings (departments, requirements, Turbo Loris settings) |
 | AIProviderService | `services/ai_provider_service.py` | Abstraction over Ollama/Anthropic/Bedrock/Azure |
+| TurboService | `services/turbo_service.py` | Turbo Loris confidence calculation, answer generation, attribution tracking |
 
 ### Question Lifecycle
 ```
-SUBMITTED → (automation check) → AUTO_ANSWERED → RESOLVED (user accepts)
-                 ↓                    ↓
-           EXPERT_QUEUE          HUMAN_REQUESTED (user rejects)
-                 ↓                    ↓
-           IN_PROGRESS ←──────────────┘
+SUBMITTED → (turbo mode?) → TURBO_ANSWERED → RESOLVED (user accepts)
+                 ↓                ↓
+         (automation check) → AUTO_ANSWERED → RESOLVED (user accepts)
+                 ↓                ↓
+           EXPERT_QUEUE      HUMAN_REQUESTED (user rejects turbo/auto)
+                 ↓                ↓
+           IN_PROGRESS ←──────────┘
                  ↓
            ANSWERED → RESOLVED (user gives feedback)
 ```
+
+### Turbo Loris Mode
+User-controlled fast-answer mode that delivers AI-generated responses when knowledge confidence exceeds a user-selected threshold.
+
+**Flow:**
+1. User submits question with `turbo_mode=true` and `turbo_threshold` (0.50/0.75/0.90)
+2. System searches knowledge base for relevant facts
+3. Calculates confidence: similarity (40%) + tier quality (30%) + coverage (30%)
+4. If confidence >= threshold: generates answer, creates TurboAttribution records, status=TURBO_ANSWERED
+5. If confidence < threshold: falls through to standard automation check → expert queue
+6. User can accept (→ resolved) or reject (→ expert queue)
+
+**Key differences from TransWarp (automation rules):**
+- Turbo uses knowledge base facts; TransWarp uses expert-created automation rules
+- Turbo confidence is user-selected threshold; TransWarp uses rule's similarity_threshold
+- Turbo creates attribution records linking to source facts and contributors
 
 ### Gap Analysis Integration
 When a question enters EXPERT_QUEUE or gets HUMAN_REQUESTED, the system runs gap analysis (non-blocking, try/except):
@@ -305,6 +329,7 @@ These patterns should be followed to avoid regressions:
 10. **Tailwind `text-accent` is invisible**: The accent color (`hsl(40 10% 96%)`) is nearly identical to the cream background. Use `text-ink-secondary` or `text-ink-primary` for visible text.
 11. **PostgreSQL enums are not auto-updated**: When adding values to a Python enum (e.g., `NotificationType`), the PostgreSQL enum type must be updated manually with `ALTER TYPE ... ADD VALUE`. `init_db()` does not update existing enum types.
 12. **Existing tables not altered by init_db()**: `Base.metadata.create_all()` only creates new tables. New columns on existing tables require manual `ALTER TABLE ADD COLUMN`.
+13. **FastAPI route ordering**: Routes with path parameters like `/{question_id}` must come AFTER specific routes like `/reassignment-requests`. Otherwise FastAPI matches the specific path as a parameter value, causing 422 UUID parsing errors. Always put specific routes before generic parameter routes.
 
 ## Design System: Tufte-Inspired
 
@@ -365,6 +390,7 @@ Display as scientific illustrations (field guide style). Variants:
 - `SubDomain` - Named sub-domains within an organization (e.g., Contracts, Employment Law)
 - `ExpertSubDomainAssignment` - Many-to-many junction: which experts cover which sub-domains
 - `DailyMetrics` - Pre-aggregated daily metrics per organization (table exists, not yet populated by scheduler)
+- `TurboAttribution` - Tracks knowledge sources that contributed to a Turbo answer (Phase 8)
 
 ### Vector Search
 Currently using JSONB for embedding storage with application-level cosine similarity.
@@ -493,6 +519,17 @@ After fresh DB reset, register via the splash page quick-login buttons or manual
 
 Note: Quick-login buttons attempt login first, then auto-register if the account doesn't exist. After DB reset, first click registers; subsequent clicks login.
 
+**IMPORTANT: If dev logins stop working after DB operations:**
+The database may have dev accounts with different passwords (e.g., from a data import or manual creation). To fix:
+
+```bash
+# Generate a fresh bcrypt hash and update all dev accounts
+HASH=$(docker exec loris-backend-1 python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt'], deprecated='auto').hash('Test1234!'))")
+docker exec loris-postgres-1 psql -U loris -d loris -c "UPDATE users SET hashed_password = '$HASH' WHERE email IN ('alice@loris.dev', 'bob@loris.dev', 'carol@loris.dev');"
+```
+
+This resets all dev account passwords to `Test1234!`.
+
 ## Planning Documents
 
 Read these in order for full context:
@@ -525,3 +562,5 @@ Read these in order for full context:
 16. **Question validation**: Frontend enforces minimum 5-word question length. Submit button disabled until all requirements met.
 17. **Schema changes without Alembic**: When adding columns to existing tables, run `ALTER TABLE ADD COLUMN` manually. When adding PostgreSQL enum values, run `ALTER TYPE ADD VALUE`. The `init_db()` only creates new tables — it does NOT alter existing ones.
 18. **Two-row header layout**: Logo + user info on row 1, nav links on row 2. Prevents overlap when many nav items are present.
+19. **Turbo Loris**: User-controlled fast-answer mode. Confidence formula: similarity (40%) + tier quality (30%) + coverage (30%). User selects threshold (50%/75%/90%). TurboAttribution records track which knowledge sources contributed to the answer.
+20. **Phase 8 migration**: Run `migrations/phase8_turbo_loris.sql` to add turbo columns, enum value, and turbo_attributions table. Required for Turbo Loris functionality.

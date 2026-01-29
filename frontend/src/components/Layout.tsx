@@ -154,6 +154,14 @@ export default function Layout() {
                 >
                   Settings
                 </Link>
+                <Link
+                  to="/moltenloris"
+                  className={`font-serif text-sm no-underline ${
+                    isActive('/moltenloris') ? 'text-loris-brown' : 'text-ink-secondary hover:text-ink-primary'
+                  }`}
+                >
+                  MoltenLoris
+                </Link>
               </>
             )}
           </nav>

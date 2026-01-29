@@ -355,6 +355,56 @@ class AIProviderService:
                 return choices[0].get("message", {}).get("content", "")
             return ""
 
+    async def generate_turbo_answer(
+        self,
+        question: str,
+        knowledge_facts: List[Dict[str, Any]],
+    ) -> Optional[str]:
+        """
+        Generate a Turbo Loris answer based on matched knowledge facts.
+        Returns the answer text or None if generation fails.
+        """
+        if not knowledge_facts:
+            return None
+
+        system_prompt = """You are Turbo Loris, an AI assistant that provides fast, accurate answers
+based on validated knowledge. Your answers should be:
+- Concise but complete
+- Based directly on the provided knowledge
+- Honest about any limitations or caveats
+- Professional and helpful
+
+IMPORTANT: Only answer based on the knowledge provided. If the knowledge is insufficient,
+say so rather than making things up."""
+
+        knowledge_summary = "\n".join([
+            f"• [{k.get('tier', 'unknown')}] {k.get('content', '')[:500]}"
+            for k in knowledge_facts[:5]  # Top 5 most relevant
+        ])
+
+        prompt = f"""Based on the following validated knowledge, answer this question:
+
+QUESTION:
+{question}
+
+KNOWLEDGE BASE:
+{knowledge_summary}
+
+Provide a clear, direct answer. If the knowledge doesn't fully cover the question,
+indicate what additional expert consultation might be needed."""
+
+        try:
+            response = await self.generate(
+                prompt,
+                system_prompt=system_prompt,
+                temperature=0.3,  # Lower temperature for more consistent answers
+                max_tokens=1024,
+            )
+            return response.strip() if response else None
+        except Exception as e:
+            logger.error(f"Turbo answer generation failed: {e}")
+            return None
+
     async def analyze_gaps(
         self,
         question: str,

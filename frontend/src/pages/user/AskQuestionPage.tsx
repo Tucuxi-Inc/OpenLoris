@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { subdomainsApi, SubDomainItem } from '../../lib/api/subdomains'
 import { orgApi, OrgSettings } from '../../lib/api/org'
+import { questionsApi } from '../../lib/api/questions'
 
 export default function AskQuestionPage() {
   const [question, setQuestion] = useState('')
@@ -10,6 +11,9 @@ export default function AskQuestionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [subdomains, setSubdomains] = useState<SubDomainItem[]>([])
   const [orgSettings, setOrgSettings] = useState<OrgSettings | null>(null)
+  // Turbo Loris state
+  const [turboMode, setTurboMode] = useState(false)
+  const [turboThreshold, setTurboThreshold] = useState(0.75)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -37,31 +41,34 @@ export default function AskQuestionPage() {
 
   const departments = orgSettings?.departments || []
   const requireDepartment = orgSettings?.require_department || false
+  const turboSettings = orgSettings?.turbo_loris
+  const turboEnabled = turboSettings?.enabled ?? true
+  const thresholdOptions = turboSettings?.threshold_options ?? [0.50, 0.75, 0.90]
+
+  // Set default threshold from org settings
+  useEffect(() => {
+    if (turboSettings?.default_threshold) {
+      setTurboThreshold(turboSettings.default_threshold)
+    }
+  }, [turboSettings?.default_threshold])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
 
     try {
-      const token = localStorage.getItem('access_token')
-      const body: Record<string, unknown> = { text: question }
-      if (subdomainId) {
-        body.subdomain_id = subdomainId
-      }
-      if (department) {
-        body.department = department
-      }
-
-      const response = await fetch('/api/v1/questions/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
+      const result = await questionsApi.submit({
+        text: question,
+        subdomain_id: subdomainId || undefined,
+        department: department || undefined,
+        turbo_mode: turboMode && turboEnabled,
+        turbo_threshold: turboMode ? turboThreshold : undefined,
       })
 
-      if (response.ok) {
+      // If Turbo answered, go directly to question detail
+      if (result.turbo_answered) {
+        navigate(`/questions/${result.question.id}`)
+      } else {
         navigate('/dashboard')
       }
     } catch (error) {
@@ -166,6 +173,75 @@ export default function AskQuestionPage() {
             If you leave this blank, Loris will route your question to the right experts automatically.
           </p>
         </div>
+
+        {/* Turbo Loris Mode */}
+        {turboEnabled && (
+          <div className="border border-rule-light p-4 rounded-sm">
+            <div className="flex items-start gap-4 mb-3">
+              <span className="label-tufte mb-0">Answer Mode</span>
+            </div>
+
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="answerMode"
+                  checked={!turboMode}
+                  onChange={() => setTurboMode(false)}
+                  className="mt-1"
+                />
+                <div>
+                  <span className="font-serif text-ink-primary">Standard (Expert-verified)</span>
+                  <p className="font-mono text-[10px] text-ink-tertiary mt-0.5">
+                    Your question goes to our domain experts for a verified answer
+                  </p>
+                </div>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="answerMode"
+                  checked={turboMode}
+                  onChange={() => setTurboMode(true)}
+                  className="mt-1"
+                />
+                <div>
+                  <span className="font-serif text-ink-primary flex items-center gap-2">
+                    <span className="text-status-warning">*</span> Turbo Loris
+                  </span>
+                  <p className="font-mono text-[10px] text-ink-tertiary mt-0.5">
+                    Instant AI answer if confidence meets your threshold
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Threshold selector when Turbo is selected */}
+            {turboMode && (
+              <div className="mt-4 pl-7">
+                <label htmlFor="turboThreshold" className="font-mono text-xs text-ink-secondary">
+                  Confidence threshold:
+                </label>
+                <select
+                  id="turboThreshold"
+                  value={turboThreshold}
+                  onChange={(e) => setTurboThreshold(parseFloat(e.target.value))}
+                  className="input-tufte ml-2 w-auto inline-block"
+                >
+                  {thresholdOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {Math.round(opt * 100)}% — {opt >= 0.9 ? 'High confidence' : opt >= 0.75 ? 'Balanced' : 'Faster, less certain'}
+                    </option>
+                  ))}
+                </select>
+                <p className="font-mono text-[10px] text-status-warning mt-2">
+                  "Fast is rough, rough can be slow" — Use expert review for critical matters.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         <hr />
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { questionsApi, Question } from '../../lib/api/questions'
+import { questionsApi, Question, TurboAttribution } from '../../lib/api/questions'
+import TurboAnswerCard from '../../components/TurboAnswerCard'
 
 export default function QuestionDetailPage() {
   const { questionId } = useParams<{ questionId: string }>()
@@ -70,11 +71,27 @@ export default function QuestionDetailPage() {
     }
   }
 
+  const handleAcceptTurbo = async () => {
+    try {
+      await questionsApi.submitFeedback(questionId!, 5)
+      setFeedbackSubmitted(true)
+      setRating(5)
+      await loadQuestion()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to accept')
+    }
+  }
+
+  const handleRejectTurbo = async () => {
+    setShowRejectForm(true)
+  }
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, { text: string; class: string }> = {
       submitted: { text: 'Submitted', class: 'text-ink-tertiary' },
       processing: { text: 'Processing', class: 'text-ink-tertiary' },
       auto_answered: { text: 'Auto-Answered', class: 'text-status-success' },
+      turbo_answered: { text: 'Turbo Answer', class: 'text-status-success' },
       human_requested: { text: 'Under Review', class: 'text-status-warning' },
       expert_queue: { text: 'In Expert Queue', class: 'text-status-warning' },
       in_progress: { text: 'Expert Working', class: 'text-status-warning' },
@@ -149,6 +166,55 @@ export default function QuestionDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Turbo-answered — show TurboAnswerCard */}
+      {question.status === 'turbo_answered' && (
+        <>
+          <div className="mb-8">
+            <TurboAnswerCard
+              answer={
+                (question.gap_analysis as unknown as Record<string, unknown>)?.proposed_answer as string ||
+                'An instant answer was generated for your question.'
+              }
+              confidence={question.turbo_confidence || 0}
+              threshold={question.turbo_threshold || 0.75}
+              attributions={
+                ((question.gap_analysis as unknown as Record<string, unknown>)?.matching_facts as TurboAttribution[]) ||
+                []
+              }
+              onAccept={handleAcceptTurbo}
+              onReject={handleRejectTurbo}
+            />
+          </div>
+
+          {showRejectForm && (
+            <div className="card-tufte mb-8">
+              <label className="label-tufte">Why isn't this answer sufficient?</label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="input-tufte w-full h-24 resize-none"
+                placeholder="Help our experts understand what you need..."
+              />
+              <div className="flex gap-3 mt-3">
+                <button
+                  onClick={handleRejectAuto}
+                  disabled={!rejectReason.trim()}
+                  className="btn-primary disabled:opacity-50"
+                >
+                  Submit
+                </button>
+                <button
+                  onClick={() => setShowRejectForm(false)}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Auto-answered — show answer with accept/reject */}
       {question.status === 'auto_answered' && (

@@ -16,6 +16,7 @@ import SubDomainManagementPage from './pages/admin/SubDomainManagementPage'
 import ReassignmentReviewPage from './pages/admin/ReassignmentReviewPage'
 import OrgSettingsPage from './pages/admin/OrgSettingsPage'
 import NotificationsPage from './pages/NotificationsPage'
+import MoltenLorisPage from './pages/MoltenLorisPage'
 
 function App() {
   return (
@@ -42,6 +43,7 @@ function App() {
           <Route path="admin/subdomains" element={<SubDomainManagementPage />} />
           <Route path="admin/reassignments" element={<ReassignmentReviewPage />} />
           <Route path="admin/settings" element={<OrgSettingsPage />} />
+          <Route path="moltenloris" element={<MoltenLorisPage />} />
         </Route>
       </Routes>
     </AuthProvider>

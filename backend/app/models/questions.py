@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Enum as SAEnum, ForeignKey, Text, text
+from sqlalchemy import String, Integer, Boolean, DateTime, Enum as SAEnum, ForeignKey, Text, text, Float
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -14,13 +14,15 @@ if TYPE_CHECKING:
     from app.models.user import User
     from app.models.answers import Answer
     from app.models.subdomain import SubDomain
+    from app.models.turbo import TurboAttribution
 
 
 class QuestionStatus(str, Enum):
     """Question lifecycle status"""
     SUBMITTED = "submitted"                 # Just received
     PROCESSING = "processing"               # Checking for automation
-    AUTO_ANSWERED = "auto_answered"         # Automated answer delivered
+    AUTO_ANSWERED = "auto_answered"         # Automated answer delivered (TransWarp)
+    TURBO_ANSWERED = "turbo_answered"       # Turbo Loris instant answer
     HUMAN_REQUESTED = "human_requested"     # User rejected auto-answer
     EXPERT_QUEUE = "expert_queue"           # Waiting for expert
     IN_PROGRESS = "in_progress"             # Expert working on it
@@ -116,6 +118,11 @@ class Question(Base, UUIDMixin, TimestampMixin):
     # Gap analysis results (stored for expert view)
     gap_analysis: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
+    # Turbo Loris fields
+    turbo_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    turbo_threshold: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    turbo_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     # Metrics
     response_time_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     resolution_time_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
@@ -149,6 +156,9 @@ class Question(Base, UUIDMixin, TimestampMixin):
     )
     reassignment_requests: Mapped[List["ReassignmentRequest"]] = relationship(
         "ReassignmentRequest", back_populates="question", cascade="all, delete-orphan"
+    )
+    turbo_attributions: Mapped[List["TurboAttribution"]] = relationship(
+        "TurboAttribution", back_populates="question", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

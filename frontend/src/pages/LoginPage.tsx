@@ -3,9 +3,9 @@ import { useAuth } from '../contexts/AuthContext'
 
 // Dev-only quick login accounts (remove for production)
 const DEV_ACCOUNTS = [
-  { email: 'carol@loris.dev', password: 'Test1234!', name: 'Carol', role: 'Business User' },
-  { email: 'bob@loris.dev', password: 'Test1234!', name: 'Bob', role: 'Domain Expert' },
-  { email: 'alice@loris.dev', password: 'Test1234!', name: 'Alice', role: 'Admin' },
+  { email: 'carol@loris.dev', password: 'Test1234!', name: 'Carol', role: 'Business User', apiRole: 'business_user' },
+  { email: 'bob@loris.dev', password: 'Test1234!', name: 'Bob', role: 'Domain Expert', apiRole: 'domain_expert' },
+  { email: 'alice@loris.dev', password: 'Test1234!', name: 'Alice', role: 'Admin', apiRole: 'admin' },
 ]
 
 export default function LoginPage() {
@@ -35,7 +35,40 @@ export default function LoginPage() {
     try {
       await login(account.email, account.password)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      // If login fails, try to register the account
+      const errorMsg = err instanceof Error ? err.message : 'Login failed'
+      if (errorMsg.includes('Incorrect email or password')) {
+        try {
+          // Register the account
+          const response = await fetch('/api/v1/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: account.email,
+              password: account.password,
+              name: account.name,
+              organization_name: 'Loris Development',
+              role: account.apiRole,
+            }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            localStorage.setItem('access_token', data.access_token)
+            localStorage.setItem('refresh_token', data.refresh_token)
+            // Reload to pick up the new session
+            window.location.href = '/dashboard'
+            return
+          } else {
+            const errData = await response.json()
+            setError(errData.detail || 'Registration failed')
+          }
+        } catch (regErr) {
+          setError('Failed to create account')
+        }
+      } else {
+        setError(errorMsg)
+      }
     } finally {
       setIsLoading(false)
     }

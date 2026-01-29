@@ -14,12 +14,17 @@ export interface Question {
   resolved_at: string | null
   satisfaction_rating: number | null
   gap_analysis?: GapAnalysis | null
+  // Turbo fields
+  turbo_mode?: boolean
+  turbo_threshold?: number | null
+  turbo_confidence?: number | null
 }
 
 export type QuestionStatus =
   | 'submitted'
   | 'processing'
   | 'auto_answered'
+  | 'turbo_answered'
   | 'human_requested'
   | 'expert_queue'
   | 'in_progress'
@@ -44,6 +49,33 @@ export interface QuestionCreate {
   category?: string
   tags?: string[]
   priority?: QuestionPriority
+  department?: string
+  subdomain_id?: string
+  // Turbo Loris mode
+  turbo_mode?: boolean
+  turbo_threshold?: number
+}
+
+export interface TurboAttribution {
+  id: string
+  source_type: string
+  source_id: string
+  display_name: string
+  contributor_name?: string
+  contribution_type: string
+  confidence_score: number
+  semantic_similarity: number
+}
+
+export interface QuestionSubmitResponse {
+  question: Question
+  auto_answered: boolean
+  auto_answer?: Answer
+  automation_similarity?: number
+  // Turbo Loris response
+  turbo_answered: boolean
+  turbo_confidence?: number
+  turbo_attributions: TurboAttribution[]
 }
 
 export interface Answer {
@@ -66,7 +98,7 @@ export interface PaginatedList<T> {
 export const questionsApi = {
   // Business user endpoints
   submit: (data: QuestionCreate) =>
-    apiClient.post<Question>('/api/v1/questions/', data),
+    apiClient.post<QuestionSubmitResponse>('/api/v1/questions/', data),
 
   list: (params?: { status?: QuestionStatus; page?: number; page_size?: number }) =>
     apiClient.get<PaginatedList<Question>>('/api/v1/questions/', { params: params as Record<string, string> }),

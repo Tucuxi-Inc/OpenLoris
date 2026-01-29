@@ -39,6 +39,7 @@ Loris connects business users with domain experts, delivering curated, expert-va
 
 ## Key Features
 
+- **Turbo Loris** — User-controlled fast-answer mode that delivers AI-generated responses instantly when knowledge confidence exceeds a user-selected threshold (50%/75%/90%)
 - **Progressive Automation** — Each answered question can become an automated response for similar future questions
 - **Gap Analysis** — AI identifies what's covered by existing knowledge and what needs expert input
 - **Knowledge Base** — Upload documents, extract facts, build an organizational knowledge graph
@@ -50,6 +51,7 @@ Loris connects business users with domain experts, delivering curated, expert-va
 - **GUD Enforcement** — "Good Until Date" system automatically expires and deactivates stale content
 - **Multi-Provider AI** — Supports Ollama (local + cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI
 - **Data Privacy** — Local Ollama models keep data on-premise; Ollama cloud uses encrypted transport with no prompt/output retention
+- **MoltenLoris** — Coming soon: autonomous Slack-monitoring agent powered by your knowledge base
 
 ## Prerequisites
 
@@ -310,6 +312,7 @@ Edit `.env` to switch AI providers:
 | Phase 5: Notifications & GUD | Complete | In-app notifications, scheduled GUD enforcement |
 | Phase 6: Analytics | Complete | Metrics dashboard, question trends, automation performance |
 | Phase 6.5: Sub-Domain Routing & Org Settings | Complete | Sub-domains, expert routing, reassignment, departments, org settings |
+| Phase 8: Turbo Loris | Complete | User-controlled fast-answer mode with confidence thresholds, MoltenLoris placeholder |
 | Phase 7: Testing & Docs | Not started | Unit/integration tests, Alembic migrations |
 
 ## Documentation

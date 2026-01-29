@@ -22,7 +22,9 @@ from app.services.automation_service import automation_service
 from app.services.knowledge_service import knowledge_service
 from app.services.notification_service import notification_service
 from app.services.subdomain_service import subdomain_service
+from app.services.turbo_service import turbo_service
 from app.models.subdomain import ExpertSubDomainAssignment
+from app.models.turbo import TurboAttribution
 
 router = APIRouter()
 
@@ -35,6 +37,9 @@ class QuestionCreate(BaseModel):
     subdomain_id: Optional[UUID] = None
     tags: Optional[List[str]] = None
     priority: Optional[QuestionPriority] = QuestionPriority.NORMAL
+    # Turbo Loris mode
+    turbo_mode: bool = False
+    turbo_threshold: float = 0.75
 
 
 class QuestionResponse(BaseModel):
@@ -54,6 +59,24 @@ class QuestionResponse(BaseModel):
     first_response_at: Optional[datetime]
     resolved_at: Optional[datetime]
     satisfaction_rating: Optional[int]
+    # Turbo fields
+    turbo_mode: bool = False
+    turbo_threshold: Optional[float] = None
+    turbo_confidence: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class TurboAttributionResponse(BaseModel):
+    id: UUID
+    source_type: str
+    source_id: UUID
+    display_name: str
+    contributor_name: Optional[str] = None
+    contribution_type: str
+    confidence_score: float
+    semantic_similarity: float
 
     class Config:
         from_attributes = True
@@ -90,6 +113,10 @@ class QuestionSubmitResponse(BaseModel):
     auto_answered: bool = False
     auto_answer: Optional[AnswerResponse] = None
     automation_similarity: Optional[float] = None
+    # Turbo Loris response
+    turbo_answered: bool = False
+    turbo_confidence: Optional[float] = None
+    turbo_attributions: List[TurboAttributionResponse] = []
 
 
 class FeedbackCreate(BaseModel):
@@ -106,6 +133,36 @@ class QuestionListResponse(BaseModel):
     total: int
     page: int
     page_size: int
+
+
+# Reassignment schemas (defined here to be available before routes)
+class ReassignmentRequestCreate(BaseModel):
+    suggested_subdomain_id: UUID
+    reason: str
+
+
+class ReassignmentRequestResponse(BaseModel):
+    id: UUID
+    question_id: UUID
+    requested_by_id: UUID
+    requested_by_name: Optional[str] = None
+    current_subdomain_id: Optional[UUID]
+    current_subdomain_name: Optional[str] = None
+    suggested_subdomain_id: UUID
+    suggested_subdomain_name: Optional[str] = None
+    reason: str
+    status: ReassignmentStatus
+    reviewed_by_id: Optional[UUID]
+    admin_notes: Optional[str]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ReassignmentReviewRequest(BaseModel):
+    approved: bool
+    admin_notes: Optional[str] = None
 
 
 # Business User Endpoints
@@ -142,12 +199,70 @@ async def submit_question(
         ai_classified_subdomain=ai_classified,
         tags=question_data.tags or [],
         priority=question_data.priority,
-        status=QuestionStatus.SUBMITTED
+        status=QuestionStatus.SUBMITTED,
+        turbo_mode=question_data.turbo_mode,
+        turbo_threshold=question_data.turbo_threshold if question_data.turbo_mode else None,
     )
 
     db.add(question)
     await db.commit()
     await db.refresh(question)
+
+    # TURBO MODE: Try to generate instant answer from knowledge base
+    if question_data.turbo_mode:
+        try:
+            turbo_result = await turbo_service.attempt_turbo_answer(
+                question=question,
+                threshold=question_data.turbo_threshold,
+                db=db,
+            )
+
+            if turbo_result.success and turbo_result.answer_content:
+                # Deliver Turbo answer
+                answer = await turbo_service.deliver_turbo_answer(
+                    db=db,
+                    question=question,
+                    turbo_result=turbo_result,
+                )
+                await db.refresh(question)
+
+                # Get attributions for response
+                attributions = await turbo_service.get_attributions(db, question.id)
+
+                return QuestionSubmitResponse(
+                    question=question,
+                    turbo_answered=True,
+                    turbo_confidence=turbo_result.confidence,
+                    turbo_attributions=[
+                        TurboAttributionResponse(
+                            id=UUID(a["id"]),
+                            source_type=a["source_type"],
+                            source_id=UUID(a["source_id"]),
+                            display_name=a["display_name"],
+                            contributor_name=a.get("contributor_name"),
+                            contribution_type=a["contribution_type"],
+                            confidence_score=a["confidence_score"],
+                            semantic_similarity=a["semantic_similarity"],
+                        )
+                        for a in attributions
+                    ],
+                    auto_answer=AnswerResponse(
+                        id=answer.id,
+                        question_id=answer.question_id,
+                        content=answer.content,
+                        source=answer.source,
+                        created_by_id=answer.created_by_id,
+                        created_at=answer.created_at,
+                        delivered_at=answer.delivered_at,
+                    ),
+                )
+            else:
+                # Turbo failed - fall through to standard flow
+                logger.info(f"Turbo mode failed for question {question.id}: {turbo_result.message}")
+
+        except Exception as turbo_err:
+            logger.warning(f"Turbo mode error for question {question.id}: {turbo_err}")
+            # Fall through to standard automation check
 
     # Check automation rules for a matching answer
     try:
@@ -274,6 +389,161 @@ async def list_my_questions(
     )
 
 
+# ------------------------------------------------------------------
+# Reassignment workflow - Admin endpoints (must be before /{question_id})
+# ------------------------------------------------------------------
+
+@router.get("/reassignment-requests", response_model=List[ReassignmentRequestResponse])
+async def list_reassignment_requests(
+    status_filter: Optional[ReassignmentStatus] = None,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: list reassignment requests."""
+    from app.models.subdomain import SubDomain
+
+    query = select(ReassignmentRequest).join(
+        Question, ReassignmentRequest.question_id == Question.id
+    ).where(
+        Question.organization_id == current_user.organization_id,
+    )
+    if status_filter:
+        query = query.where(ReassignmentRequest.status == status_filter)
+    query = query.order_by(ReassignmentRequest.created_at.desc())
+
+    result = await db.execute(query)
+    requests = list(result.scalars().all())
+
+    # Enrich with names
+    items = []
+    for r in requests:
+        # Get requester name
+        user_result = await db.execute(select(User.name).where(User.id == r.requested_by_id))
+        requester_name = user_result.scalar_one_or_none()
+
+        # Get subdomain names
+        current_sd_name = None
+        if r.current_subdomain_id:
+            sd_result = await db.execute(select(SubDomain.name).where(SubDomain.id == r.current_subdomain_id))
+            current_sd_name = sd_result.scalar_one_or_none()
+
+        sd_result = await db.execute(select(SubDomain.name).where(SubDomain.id == r.suggested_subdomain_id))
+        suggested_sd_name = sd_result.scalar_one_or_none()
+
+        items.append(ReassignmentRequestResponse(
+            id=r.id,
+            question_id=r.question_id,
+            requested_by_id=r.requested_by_id,
+            requested_by_name=requester_name,
+            current_subdomain_id=r.current_subdomain_id,
+            current_subdomain_name=current_sd_name,
+            suggested_subdomain_id=r.suggested_subdomain_id,
+            suggested_subdomain_name=suggested_sd_name,
+            reason=r.reason,
+            status=r.status,
+            reviewed_by_id=r.reviewed_by_id,
+            admin_notes=r.admin_notes,
+            created_at=r.created_at,
+        ))
+
+    return items
+
+
+@router.put("/reassignment-requests/{request_id}/review")
+async def review_reassignment_request(
+    request_id: UUID,
+    data: ReassignmentReviewRequest,
+    current_user: User = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin: approve or reject a reassignment request."""
+    result = await db.execute(
+        select(ReassignmentRequest).where(ReassignmentRequest.id == request_id)
+    )
+    req = result.scalar_one_or_none()
+    if not req:
+        raise HTTPException(status_code=404, detail="Reassignment request not found")
+
+    if req.status != ReassignmentStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Request already reviewed")
+
+    req.reviewed_by_id = current_user.id
+    req.reviewed_at = datetime.now(timezone.utc)
+    req.admin_notes = data.admin_notes
+
+    if data.approved:
+        req.status = ReassignmentStatus.APPROVED
+
+        # Update question's sub-domain
+        q_result = await db.execute(select(Question).where(Question.id == req.question_id))
+        question = q_result.scalar_one_or_none()
+        if question:
+            question.subdomain_id = req.suggested_subdomain_id
+            question.ai_classified_subdomain = False
+
+            # Unassign from current expert so it goes back to queue
+            question.assigned_to_id = None
+            if question.status == QuestionStatus.IN_PROGRESS:
+                question.status = QuestionStatus.EXPERT_QUEUE
+
+            # Route to new sub-domain experts
+            try:
+                await subdomain_service.route_question_to_subdomain(
+                    db, question, req.suggested_subdomain_id
+                )
+            except Exception:
+                pass
+
+        # Notify requesting expert
+        try:
+            from app.models.subdomain import SubDomain
+            sd_result = await db.execute(
+                select(SubDomain.name).where(SubDomain.id == req.suggested_subdomain_id)
+            )
+            sd_name = sd_result.scalar_one_or_none() or "Unknown"
+            await notification_service.create_notification(
+                db=db,
+                user_id=req.requested_by_id,
+                organization_id=current_user.organization_id,
+                notification_type=NotificationType.REASSIGNMENT_APPROVED,
+                title="Reassignment approved",
+                message=f'Question rerouted to "{sd_name}"',
+                link_url=f"/expert/questions/{req.question_id}",
+                extra_data={"question_id": str(req.question_id)},
+            )
+        except Exception:
+            pass
+    else:
+        req.status = ReassignmentStatus.REJECTED
+
+        # Notify requesting expert
+        try:
+            msg = "Your reassignment request was declined"
+            if data.admin_notes:
+                msg += f": {data.admin_notes[:100]}"
+            await notification_service.create_notification(
+                db=db,
+                user_id=req.requested_by_id,
+                organization_id=current_user.organization_id,
+                notification_type=NotificationType.REASSIGNMENT_REJECTED,
+                title="Reassignment declined",
+                message=msg,
+                link_url=f"/expert/questions/{req.question_id}",
+                extra_data={"question_id": str(req.question_id)},
+            )
+        except Exception:
+            pass
+
+    await db.commit()
+
+    action = "approved" if data.approved else "rejected"
+    return {"message": f"Reassignment request {action}"}
+
+
+# ------------------------------------------------------------------
+# Question detail and actions
+# ------------------------------------------------------------------
+
 @router.get("/{question_id}", response_model=QuestionDetail)
 async def get_question(
     question_id: UUID,
@@ -315,7 +585,7 @@ async def submit_feedback(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    if question.status not in (QuestionStatus.ANSWERED, QuestionStatus.AUTO_ANSWERED, QuestionStatus.RESOLVED):
+    if question.status not in (QuestionStatus.ANSWERED, QuestionStatus.AUTO_ANSWERED, QuestionStatus.TURBO_ANSWERED, QuestionStatus.RESOLVED):
         raise HTTPException(status_code=400, detail="Question has not been answered yet")
 
     question.satisfaction_rating = feedback.rating
@@ -325,6 +595,9 @@ async def submit_feedback(
         await automation_service.handle_user_feedback(
             db=db, question=question, accepted=True
         )
+    elif question.status == QuestionStatus.TURBO_ANSWERED:
+        # Accepting turbo answer via feedback
+        await turbo_service.handle_turbo_acceptance(db=db, question=question)
     elif question.status == QuestionStatus.ANSWERED:
         question.status = QuestionStatus.RESOLVED
         question.resolved_at = datetime.now(timezone.utc)
@@ -341,7 +614,7 @@ async def accept_auto_answer(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Accept an auto-answer, marking the question as resolved."""
+    """Accept an auto-answer or turbo-answer, marking the question as resolved."""
     result = await db.execute(
         select(Question).where(
             Question.id == question_id,
@@ -353,14 +626,16 @@ async def accept_auto_answer(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    if question.status != QuestionStatus.AUTO_ANSWERED:
-        raise HTTPException(status_code=400, detail="Question is not auto-answered")
-
-    await automation_service.handle_user_feedback(
-        db=db, question=question, accepted=True
-    )
-
-    return {"message": "Auto-answer accepted"}
+    if question.status == QuestionStatus.TURBO_ANSWERED:
+        await turbo_service.handle_turbo_acceptance(db=db, question=question)
+        return {"message": "Turbo answer accepted"}
+    elif question.status == QuestionStatus.AUTO_ANSWERED:
+        await automation_service.handle_user_feedback(
+            db=db, question=question, accepted=True
+        )
+        return {"message": "Auto-answer accepted"}
+    else:
+        raise HTTPException(status_code=400, detail="Question is not auto-answered or turbo-answered")
 
 
 @router.post("/{question_id}/request-human")
@@ -370,7 +645,7 @@ async def request_human_review(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Reject auto-answer and request human review."""
+    """Reject auto-answer or turbo-answer and request human review."""
     result = await db.execute(
         select(Question).where(
             Question.id == question_id,
@@ -382,8 +657,29 @@ async def request_human_review(
     if not question:
         raise HTTPException(status_code=404, detail="Question not found")
 
-    if question.status != QuestionStatus.AUTO_ANSWERED:
-        raise HTTPException(status_code=400, detail="Question is not auto-answered")
+    if question.status == QuestionStatus.TURBO_ANSWERED:
+        # Handle Turbo rejection
+        await turbo_service.handle_turbo_rejection(
+            db=db,
+            question=question,
+            rejection_reason=clarification.message,
+        )
+        # Run gap analysis for the expert who will handle this
+        try:
+            ka = await knowledge_service.run_gap_analysis(
+                question.original_text, current_user.organization_id, db
+            )
+            if ka:
+                existing_ga = question.gap_analysis or {}
+                existing_ga["knowledge_analysis"] = ka
+                question.gap_analysis = existing_ga
+                await db.commit()
+        except Exception:
+            pass  # Non-blocking
+        return {"message": "Human review requested"}
+
+    elif question.status != QuestionStatus.AUTO_ANSWERED:
+        raise HTTPException(status_code=400, detail="Question is not auto-answered or turbo-answered")
 
     await automation_service.handle_user_feedback(
         db=db,
@@ -637,37 +933,8 @@ async def request_clarification(
 
 
 # ------------------------------------------------------------------
-# Reassignment workflow
+# Expert request-reassignment endpoint
 # ------------------------------------------------------------------
-
-class ReassignmentRequestCreate(BaseModel):
-    suggested_subdomain_id: UUID
-    reason: str
-
-
-class ReassignmentRequestResponse(BaseModel):
-    id: UUID
-    question_id: UUID
-    requested_by_id: UUID
-    requested_by_name: Optional[str] = None
-    current_subdomain_id: Optional[UUID]
-    current_subdomain_name: Optional[str] = None
-    suggested_subdomain_id: UUID
-    suggested_subdomain_name: Optional[str] = None
-    reason: str
-    status: ReassignmentStatus
-    reviewed_by_id: Optional[UUID]
-    admin_notes: Optional[str]
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class ReassignmentReviewRequest(BaseModel):
-    approved: bool
-    admin_notes: Optional[str] = None
-
 
 @router.post("/{question_id}/request-reassignment", response_model=ReassignmentRequestResponse)
 async def request_reassignment(
@@ -746,150 +1013,3 @@ async def request_reassignment(
         admin_notes=req.admin_notes,
         created_at=req.created_at,
     )
-
-
-@router.get("/reassignment-requests", response_model=List[ReassignmentRequestResponse])
-async def list_reassignment_requests(
-    status_filter: Optional[ReassignmentStatus] = None,
-    current_user: User = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin: list reassignment requests."""
-    from app.models.subdomain import SubDomain
-
-    query = select(ReassignmentRequest).join(
-        Question, ReassignmentRequest.question_id == Question.id
-    ).where(
-        Question.organization_id == current_user.organization_id,
-    )
-    if status_filter:
-        query = query.where(ReassignmentRequest.status == status_filter)
-    query = query.order_by(ReassignmentRequest.created_at.desc())
-
-    result = await db.execute(query)
-    requests = list(result.scalars().all())
-
-    # Enrich with names
-    items = []
-    for r in requests:
-        # Get requester name
-        user_result = await db.execute(select(User.name).where(User.id == r.requested_by_id))
-        requester_name = user_result.scalar_one_or_none()
-
-        # Get subdomain names
-        current_sd_name = None
-        if r.current_subdomain_id:
-            sd_result = await db.execute(select(SubDomain.name).where(SubDomain.id == r.current_subdomain_id))
-            current_sd_name = sd_result.scalar_one_or_none()
-
-        sd_result = await db.execute(select(SubDomain.name).where(SubDomain.id == r.suggested_subdomain_id))
-        suggested_sd_name = sd_result.scalar_one_or_none()
-
-        items.append(ReassignmentRequestResponse(
-            id=r.id,
-            question_id=r.question_id,
-            requested_by_id=r.requested_by_id,
-            requested_by_name=requester_name,
-            current_subdomain_id=r.current_subdomain_id,
-            current_subdomain_name=current_sd_name,
-            suggested_subdomain_id=r.suggested_subdomain_id,
-            suggested_subdomain_name=suggested_sd_name,
-            reason=r.reason,
-            status=r.status,
-            reviewed_by_id=r.reviewed_by_id,
-            admin_notes=r.admin_notes,
-            created_at=r.created_at,
-        ))
-
-    return items
-
-
-@router.put("/reassignment-requests/{request_id}/review")
-async def review_reassignment(
-    request_id: UUID,
-    data: ReassignmentReviewRequest,
-    current_user: User = Depends(get_current_admin),
-    db: AsyncSession = Depends(get_db),
-):
-    """Admin: approve or reject a reassignment request."""
-    result = await db.execute(
-        select(ReassignmentRequest).where(ReassignmentRequest.id == request_id)
-    )
-    req = result.scalar_one_or_none()
-    if not req:
-        raise HTTPException(status_code=404, detail="Reassignment request not found")
-
-    if req.status != ReassignmentStatus.PENDING:
-        raise HTTPException(status_code=400, detail="Request already reviewed")
-
-    req.reviewed_by_id = current_user.id
-    req.reviewed_at = datetime.now(timezone.utc)
-    req.admin_notes = data.admin_notes
-
-    if data.approved:
-        req.status = ReassignmentStatus.APPROVED
-
-        # Update question's sub-domain
-        q_result = await db.execute(select(Question).where(Question.id == req.question_id))
-        question = q_result.scalar_one_or_none()
-        if question:
-            question.subdomain_id = req.suggested_subdomain_id
-            question.ai_classified_subdomain = False
-
-            # Unassign from current expert so it goes back to queue
-            question.assigned_to_id = None
-            if question.status == QuestionStatus.IN_PROGRESS:
-                question.status = QuestionStatus.EXPERT_QUEUE
-
-            # Route to new sub-domain experts
-            try:
-                await subdomain_service.route_question_to_subdomain(
-                    db, question, req.suggested_subdomain_id
-                )
-            except Exception:
-                pass
-
-        # Notify requesting expert
-        try:
-            from app.models.subdomain import SubDomain
-            sd_result = await db.execute(
-                select(SubDomain.name).where(SubDomain.id == req.suggested_subdomain_id)
-            )
-            sd_name = sd_result.scalar_one_or_none() or "Unknown"
-            await notification_service.create_notification(
-                db=db,
-                user_id=req.requested_by_id,
-                organization_id=current_user.organization_id,
-                notification_type=NotificationType.REASSIGNMENT_APPROVED,
-                title="Reassignment approved",
-                message=f'Question rerouted to "{sd_name}"',
-                link_url=f"/expert/questions/{req.question_id}",
-                extra_data={"question_id": str(req.question_id)},
-            )
-        except Exception:
-            pass
-    else:
-        req.status = ReassignmentStatus.REJECTED
-
-        # Notify requesting expert
-        try:
-            msg = "Your reassignment request was declined"
-            if data.admin_notes:
-                msg += f": {data.admin_notes[:100]}"
-            await notification_service.create_notification(
-                db=db,
-                user_id=req.requested_by_id,
-                organization_id=current_user.organization_id,
-                notification_type=NotificationType.REASSIGNMENT_REJECTED,
-                title="Reassignment declined",
-                message=msg,
-                link_url=f"/expert/questions/{req.question_id}",
-                extra_data={"question_id": str(req.question_id)},
-            )
-        except Exception:
-            pass
-
-    await db.commit()
-
-    action = "approved" if data.approved else "rejected"
-    return {"message": f"Reassignment request {action}"}
