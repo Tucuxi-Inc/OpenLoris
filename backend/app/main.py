@@ -13,6 +13,8 @@ from app.api.v1 import health, auth, questions, automation, knowledge, users, no
 from app.api.v1 import documents as documents_api
 from app.api.v1 import settings as settings_api
 from app.api.v1 import org_settings as org_settings_api
+from app.api.v1 import gdrive as gdrive_api
+from app.api.v1 import molten_sync as molten_sync_api
 from app.services.scheduler_service import scheduler_service
 
 
@@ -92,6 +94,8 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router, prefix="/api/v1/analytics", tags=["analytics"])
     app.include_router(subdomains.router, prefix="/api/v1/subdomains", tags=["subdomains"])
     app.include_router(org_settings_api.router, prefix="/api/v1/org", tags=["org-settings"])
+    app.include_router(gdrive_api.router, prefix="/api/v1/gdrive", tags=["gdrive"])
+    app.include_router(molten_sync_api.router, prefix="/api/v1/molten-sync", tags=["molten-sync"])
 
     return app
 

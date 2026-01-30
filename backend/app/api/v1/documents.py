@@ -237,6 +237,47 @@ async def reject_candidate(
     return {"message": "Candidate rejected"}
 
 
+class BulkApprovalRequest(BaseModel):
+    min_confidence: float = 0.5
+    max_count: Optional[int] = None
+
+
+@router.post("/{document_id}/approve-all")
+async def bulk_approve_candidates(
+    document_id: UUID,
+    data: BulkApprovalRequest = BulkApprovalRequest(),
+    current_user: User = Depends(get_current_active_expert),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Bulk approve all pending candidates for a document.
+
+    Useful for importing verified documents like FAQs, policies, etc.
+    Individual review is recommended for expert answers that need refinement.
+
+    Args:
+        document_id: Document to approve candidates for
+        min_confidence: Only approve candidates with confidence >= this (default 0.5)
+        max_count: Optional limit on number to approve
+
+    Returns:
+        Count of approved facts
+    """
+    approved_count, errors = await document_service.bulk_approve_candidates(
+        db=db,
+        document_id=document_id,
+        expert_user_id=current_user.id,
+        organization_id=current_user.organization_id,
+        min_confidence=data.min_confidence,
+        max_count=data.max_count,
+    )
+    return {
+        "approved": approved_count,
+        "errors": len(errors),
+        "error_messages": errors[:5] if errors else []
+    }
+
+
 # ---------- Routes: GUD management ----------
 
 @router.post("/{document_id}/extend")

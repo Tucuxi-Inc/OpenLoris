@@ -29,8 +29,9 @@ Core workflow: User asks question → System checks automation rules → If matc
 | Phase 9a: AI Provider Configuration (Backend) | COMPLETE | Encrypted API key storage, org-specific AI config, multi-provider support (Ollama/Anthropic/Bedrock/Azure) |
 | Phase 9b: AI Provider Configuration (Frontend) | COMPLETE | Admin UI for AI provider settings, connection testing, model selection |
 | Phase 10: LorisAvatar Component | COMPLETE | Reusable LorisAvatar component (15 moods, 6 sizes), integrated throughout app for loading/empty/status states |
-| Phase 9c: GDrive via Zapier MCP | PLANNED | Google Drive integration via Zapier MCP (simplified auth, unified access for Web App + MoltenLoris) |
-| Phase 11: MoltenLoris Foundation | PLANNED | Backend support, settings UI, SOUL file generation for Slack agent |
+| Phase 9c: GDrive via Zapier MCP | COMPLETE | Google Drive integration via Zapier MCP (simplified auth, unified access for Web App + MoltenLoris) |
+| Phase 9d: MoltenLoris Sync | COMPLETE | Slack monitoring for expert answers, knowledge export to GDrive, air gap architecture |
+| Phase 11: MoltenLoris Foundation | PLANNED | SOUL file generation, Slack bot deployment, VM agent setup |
 
 ## Technology Stack
 
@@ -149,7 +150,8 @@ backend/app/
 │   ├── analytics.py               # Overview, trends, automation, knowledge, experts (5 endpoints)
 │   ├── subdomains.py              # Sub-domain CRUD, expert assignment, question routing
 │   ├── org_settings.py            # Organization settings (departments, requirements)
-│   └── ai_settings.py             # AI provider configuration endpoints (Phase 9a)
+│   ├── ai_settings.py             # AI provider configuration endpoints (Phase 9a)
+│   └── gdrive.py                  # GDrive sync via Zapier MCP (Phase 9c)
 └── services/
     ├── ai_provider_service.py       # Multi-provider AI (Ollama/Anthropic/etc.)
     ├── embedding_service.py         # Embeddings (Ollama → hash fallback)
@@ -161,7 +163,8 @@ backend/app/
     ├── scheduler_service.py         # APScheduler daily GUD expiry checks
     ├── analytics_service.py        # On-the-fly metrics computation (overview, trends, automation, knowledge, experts)
     ├── subdomain_service.py        # Sub-domain routing, AI classification, SLA monitoring
-    └── turbo_service.py            # Turbo Loris confidence calculation, answer generation (Phase 8)
+    ├── turbo_service.py            # Turbo Loris confidence calculation, answer generation (Phase 8)
+    └── gdrive_service.py           # Google Drive sync via Zapier MCP (Phase 9c)
 ```
 
 ### Frontend File Structure
@@ -173,6 +176,7 @@ frontend/src/
 ├── components/NotificationBell.tsx  # Bell icon with unread count, dropdown
 ├── components/TurboAnswerCard.tsx   # Turbo answer display with confidence meter (Phase 8)
 ├── components/LorisAvatar.tsx       # Reusable Loris mascot (15 moods, 6 sizes) (Phase 10)
+├── components/settings/GDriveSettings.tsx  # GDrive settings panel (Phase 9c)
 ├── lib/api/
 │   ├── client.ts                    # Axios client with auth interceptors
 │   ├── questions.ts                 # Q&A API client
@@ -183,7 +187,8 @@ frontend/src/
 │   ├── analytics.ts               # Analytics API (overview, trends, automation, knowledge, experts)
 │   ├── subdomains.ts              # Sub-domain CRUD API
 │   ├── org.ts                     # Organization settings API (departments, requirements)
-│   └── aiSettings.ts              # AI provider settings API (Phase 9b)
+│   ├── aiSettings.ts              # AI provider settings API (Phase 9b)
+│   └── gdrive.ts                  # GDrive sync API (Phase 9c)
 ├── pages/
 │   ├── LoginPage.tsx                # Splash page with hero, login, dev quick-login buttons
 │   ├── MoltenLorisPage.tsx          # MoltenLoris coming soon placeholder (Phase 8)
@@ -201,7 +206,7 @@ frontend/src/
 │   │   ├── UserManagementPage.tsx   # User CRUD, role changes, activate/deactivate, sub-domain assignment
 │   │   ├── SubDomainManagementPage.tsx  # Sub-domain CRUD, expert assignment
 │   │   ├── ReassignmentReviewPage.tsx   # Review and approve/reject reassignment requests
-│   │   ├── OrgSettingsPage.tsx      # Department management, question requirements toggle
+│   │   ├── OrgSettingsPage.tsx      # Department management, question requirements, GDrive settings (Phase 9c)
 │   │   └── AISettingsPage.tsx       # AI provider configuration (Phase 9b)
 │   └── NotificationsPage.tsx        # Full notification list with filters, pagination
 └── styles/globals.css               # Tufte design system
@@ -223,7 +228,7 @@ frontend/src/
 | DocumentExpirationService | `services/document_expiration_service.py` | GUD enforcement, expiry checking, renewal |
 | EmbeddingService | `services/embedding_service.py` | Vector embeddings via Ollama nomic-embed-text |
 | NotificationService | `services/notification_service.py` | Create/manage notifications, workflow helpers |
-| SchedulerService | `services/scheduler_service.py` | APScheduler daily GUD expiry checks at 2 AM |
+| SchedulerService | `services/scheduler_service.py` | APScheduler jobs: GUD expiry (daily), SLA checks (hourly), MoltenLoris sync (every 15min/1hr) |
 | Analytics API | `api/v1/analytics.py` | Overview KPIs, question trends, automation stats, knowledge coverage, expert performance |
 | AnalyticsService | `services/analytics_service.py` | On-the-fly metrics from existing tables (no pre-aggregation) |
 | SubDomains API | `api/v1/subdomains.py` | Sub-domain CRUD, expert assignment, question routing |
@@ -232,6 +237,11 @@ frontend/src/
 | AIProviderService | `services/ai_provider_service.py` | Abstraction over Ollama/Anthropic/Bedrock/Azure |
 | TurboService | `services/turbo_service.py` | Turbo Loris confidence calculation, answer generation, attribution tracking |
 | AI Settings API | `api/v1/ai_settings.py` | Org-specific AI provider configuration, encrypted API key storage (Phase 9a) |
+| GDrive API | `api/v1/gdrive.py` | GDrive settings, sync, folders, files (Phase 9c) |
+| GDriveService | `services/gdrive_service.py` | Google Drive sync via Zapier MCP, knowledge export/import (Phase 9c) |
+| MCPClient | `services/mcp_client.py` | MCP server communication for Slack reading and GDrive writing |
+| SlackMonitorService | `services/slack_monitor_service.py` | Scans Slack for MoltenLoris escalations and expert answers |
+| KnowledgeExportService | `services/knowledge_export_service.py` | Exports approved knowledge to GDrive as markdown files |
 
 ### Question Lifecycle
 ```
@@ -320,6 +330,10 @@ Notifications are created automatically at these workflow points:
 
 ### Scheduler (APScheduler)
 - Daily GUD expiry check at 2:00 AM
+- Hourly SLA breach check (every hour at :00)
+- MoltenLoris sync jobs (only if MCP_SERVER_URL configured):
+  - Slack scan every 15 minutes for expert answers to MoltenLoris escalations
+  - Knowledge export to GDrive every hour
 - Runs in the FastAPI process (no extra containers)
 - Checks automation rules, documents, and knowledge facts
 - Creates notifications + deactivates expired items
@@ -403,6 +417,7 @@ Display as scientific illustrations (field guide style). Variants:
 - `ExpertSubDomainAssignment` - Many-to-many junction: which experts cover which sub-domains
 - `DailyMetrics` - Pre-aggregated daily metrics per organization (table exists, not yet populated by scheduler)
 - `TurboAttribution` - Tracks knowledge sources that contributed to a Turbo answer (Phase 8)
+- `SlackCapture` - Q&A pairs captured from Slack where MoltenLoris escalated and expert answered (Phase 9d)
 
 ### Vector Search
 Currently using JSONB for embedding storage with application-level cosine similarity.
@@ -506,6 +521,25 @@ All analytics endpoints require expert+ role. Period accepts: `7d`, `30d`, `90d`
 - `GET /settings` - Get org settings (any authenticated user)
 - `PUT /settings` - Update org settings (admin-only) — departments list, require_department toggle
 
+### GDrive (`/api/v1/gdrive/`)
+- `GET /settings` - Get GDrive configuration (any authenticated user)
+- `PUT /settings` - Update GDrive configuration (admin-only)
+- `POST /test` - Test GDrive connection via Zapier MCP (admin-only)
+- `GET /folders` - List available GDrive folders (admin-only)
+- `GET /files` - List files in configured folder (any authenticated user)
+- `POST /sync` - Trigger knowledge sync (admin-only)
+- `GET /status` - Get current sync status (any authenticated user)
+
+### MoltenLoris Sync (`/api/v1/molten-sync/`)
+- `GET /status` - Get MCP/Slack/GDrive configuration status (expert+)
+- `POST /scan-slack` - Trigger manual Slack scan for expert answers (admin-only)
+- `POST /export-knowledge` - Trigger manual knowledge export to GDrive (admin-only)
+- `GET /export-status` - Get export statistics by category (expert+)
+- `GET /captures` - List Slack captures pending review (expert+)
+- `GET /captures/{id}` - Get specific Slack capture (expert+)
+- `POST /captures/{id}/approve` - Approve capture for knowledge base (expert+)
+- `POST /captures/{id}/reject` - Reject capture with reason (expert+)
+
 ### Settings (`/api/v1/settings/`)
 - `GET /ai-provider` - Current AI provider config (expert-only)
 - `GET /ollama-models` - List available Ollama models (expert-only)
@@ -578,3 +612,4 @@ Read these in order for full context:
 20. **Phase 8 migration**: Run `migrations/phase8_turbo_loris.sql` to add turbo columns, enum value, and turbo_attributions table. Required for Turbo Loris functionality.
 21. **AI Provider Configuration** (Phase 9): Org-specific AI settings with encrypted API key storage using Fernet. Supports Ollama (local/cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI. Admin UI for provider selection, model configuration, and connection testing.
 22. **LorisAvatar Component** (Phase 10): Reusable component for Loris mascot images with 15 moods (default, turbo, molten, scholar, legal-scholar, thinking, studying, celebration, alert, confused, detective, architect, battle, mediator, traffic-cop) and 6 sizes (xs, sm, md, lg, xl, 2xl). Integrated throughout app for loading states, empty states, and contextual feedback. Includes `LorisWithMessage` helper and `MOOD_SUGGESTIONS` object.
+23. **MoltenLoris Air Gap Architecture** (Phase 9d): MoltenLoris (Slack bot) and Loris Web App never communicate directly. Communication happens through: (1) Slack - MoltenLoris writes answers, Loris reads expert responses to escalations; (2) Google Drive - Loris writes knowledge files, MoltenLoris reads them. Configured via MCP_SERVER_URL, SLACK_MONITOR_CHANNELS, and GDRIVE_KNOWLEDGE_FOLDER_ID env vars. Slack captures stored in `slack_captures` table for expert review before becoming WisdomFacts.

@@ -136,6 +136,12 @@ export const documentsApi = {
   rejectCandidate: (candidateId: string, reason?: string) =>
     apiClient.post(`/api/v1/documents/facts/${candidateId}/reject`, { reason: reason || 'Rejected by expert' }),
 
+  bulkApprove: (documentId: string, options?: { min_confidence?: number; max_count?: number }) =>
+    apiClient.post<{ approved: number; errors: number; error_messages: string[] }>(
+      `/api/v1/documents/${documentId}/approve-all`,
+      options || {}
+    ),
+
   // GUD
   extendGud: (id: string, data: { new_good_until_date?: string; is_perpetual?: boolean }) =>
     apiClient.post(`/api/v1/documents/${id}/extend`, data),

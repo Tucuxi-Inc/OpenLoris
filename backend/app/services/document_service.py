@@ -474,6 +474,85 @@ class DocumentService:
         await db.commit()
         return True
 
+    async def bulk_approve_candidates(
+        self,
+        db: AsyncSession,
+        document_id: UUID,
+        expert_user_id: UUID,
+        organization_id: UUID,
+        *,
+        min_confidence: float = 0.5,
+        max_count: Optional[int] = None,
+    ) -> Tuple[int, List[str]]:
+        """
+        Bulk approve pending candidates for a document.
+
+        Args:
+            document_id: Document to approve candidates for
+            expert_user_id: Expert performing approval
+            organization_id: Organization context
+            min_confidence: Minimum confidence threshold (default 0.5)
+            max_count: Optional limit on number to approve
+
+        Returns:
+            Tuple of (approved_count, error_messages)
+        """
+        from app.services.knowledge_service import knowledge_service
+
+        # Get pending candidates meeting confidence threshold
+        stmt = (
+            select(ExtractedFactCandidate)
+            .where(
+                ExtractedFactCandidate.document_id == document_id,
+                ExtractedFactCandidate.validation_status == ValidationStatus.PENDING,
+                ExtractedFactCandidate.extraction_confidence >= min_confidence,
+            )
+            .order_by(ExtractedFactCandidate.extraction_confidence.desc())
+        )
+        if max_count:
+            stmt = stmt.limit(max_count)
+
+        result = await db.execute(stmt)
+        candidates = list(result.scalars().all())
+
+        approved_count = 0
+        errors: List[str] = []
+
+        for candidate in candidates:
+            try:
+                fact = await knowledge_service.create_fact(
+                    db=db,
+                    organization_id=organization_id,
+                    content=candidate.fact_text,
+                    expert_user_id=expert_user_id,
+                    summary=candidate.summary,
+                    domain=candidate.suggested_domain,
+                    importance=candidate.suggested_importance or 5,
+                    tags=candidate.suggested_tags,
+                    confidence_score=candidate.extraction_confidence,
+                    tier=WisdomTier.TIER_0C,
+                    source_document_id=candidate.document_id,
+                )
+
+                candidate.validation_status = ValidationStatus.APPROVED
+                candidate.validated_by_id = expert_user_id
+                candidate.validated_at = datetime.now(timezone.utc)
+                candidate.created_wisdom_fact_id = fact.id
+                approved_count += 1
+            except Exception as e:
+                errors.append(f"Failed to approve candidate {candidate.id}: {str(e)}")
+
+        # Update document counter
+        doc_result = await db.execute(
+            select(KnowledgeDocument).where(KnowledgeDocument.id == document_id)
+        )
+        doc = doc_result.scalar_one_or_none()
+        if doc:
+            doc.validated_facts_count = (doc.validated_facts_count or 0) + approved_count
+
+        await db.commit()
+        return approved_count, errors
+
     # ------------------------------------------------------------------
     # Queries
     # ------------------------------------------------------------------

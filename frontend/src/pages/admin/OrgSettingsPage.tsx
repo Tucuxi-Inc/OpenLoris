@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { orgApi, OrgSettings } from '../../lib/api/org'
 import AIProviderSettingsPanel from '../../components/settings/AIProviderSettings'
+import GDriveSettingsPanel from '../../components/settings/GDriveSettings'
+import MoltenLorisSettingsPanel from '../../components/settings/MoltenLorisSettings'
 
 export default function OrgSettingsPage() {
   const [settings, setSettings] = useState<OrgSettings | null>(null)
@@ -80,11 +82,11 @@ export default function OrgSettingsPage() {
   }
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-6xl">
       <div className="mb-8">
         <h1 className="text-3xl text-ink-primary mb-2">Organization Settings</h1>
         <p className="font-serif text-ink-secondary">
-          Configure departments, AI providers, and other organization-wide settings.
+          Configure departments, AI providers, and integrations.
         </p>
       </div>
 
@@ -99,96 +101,112 @@ export default function OrgSettingsPage() {
         </div>
       )}
 
-      {/* AI Provider Settings */}
-      <div className="mb-6">
-        <AIProviderSettingsPanel />
-      </div>
-
-      {/* Departments */}
-      <div className="card-tufte mb-6">
-        <h3 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-4">
-          Departments
-        </h3>
-        <p className="font-serif text-sm text-ink-secondary mb-4">
-          Define the departments in your organization. Users can select their department when asking questions.
-        </p>
-
-        {/* Department list */}
-        {departments.length > 0 ? (
-          <div className="space-y-2 mb-4">
-            {departments.map(dept => (
-              <div key={dept} className="flex items-center justify-between py-2 px-3 bg-cream-200 rounded-sm">
-                <span className="font-serif text-sm text-ink-primary">{dept}</span>
-                <button
-                  onClick={() => handleRemoveDepartment(dept)}
-                  className="font-mono text-xs text-status-error hover:text-ink-primary"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+      {/* Two-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column */}
+        <div className="space-y-6">
+          {/* AI Provider Settings */}
+          <div className="card-tufte">
+            <AIProviderSettingsPanel />
           </div>
-        ) : (
-          <p className="font-serif text-sm text-ink-muted mb-4 italic">
-            No departments configured yet.
-          </p>
-        )}
 
-        {/* Add department */}
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newDepartment}
-            onChange={(e) => setNewDepartment(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddDepartment() } }}
-            className="input-tufte flex-1"
-            placeholder="Department name..."
-          />
-          <button
-            onClick={handleAddDepartment}
-            disabled={!newDepartment.trim()}
-            className="btn-secondary disabled:opacity-50"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-
-      {/* Require department toggle */}
-      <div className="card-tufte mb-6">
-        <h3 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-4">
-          Question Requirements
-        </h3>
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={requireDepartment}
-            onChange={(e) => setRequireDepartment(e.target.checked)}
-            className="w-4 h-4 accent-loris-brown"
-          />
-          <div>
-            <span className="font-serif text-sm text-ink-primary">
-              Require department when asking a question
-            </span>
-            <p className="font-mono text-[10px] text-ink-tertiary mt-1">
-              When enabled, users must select a department before submitting a question.
+          {/* Departments & Question Requirements */}
+          <div className="card-tufte">
+            <h3 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-4">
+              Departments
+            </h3>
+            <p className="font-serif text-sm text-ink-secondary mb-4">
+              Define departments for question routing.
             </p>
-          </div>
-        </label>
-      </div>
 
-      {/* Save Department Settings */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={handleSave}
-          disabled={isSaving || !hasChanges}
-          className="btn-primary disabled:opacity-50"
-        >
-          {isSaving ? 'Saving...' : 'Save Department Settings'}
-        </button>
-        {hasChanges && (
-          <span className="font-mono text-xs text-status-warning">Unsaved changes</span>
-        )}
+            {/* Department list */}
+            {departments.length > 0 ? (
+              <div className="space-y-2 mb-4">
+                {departments.map(dept => (
+                  <div key={dept} className="flex items-center justify-between py-2 px-3 bg-cream-200 rounded-sm">
+                    <span className="font-serif text-sm text-ink-primary">{dept}</span>
+                    <button
+                      onClick={() => handleRemoveDepartment(dept)}
+                      className="font-mono text-xs text-status-error hover:text-ink-primary"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="font-serif text-sm text-ink-muted mb-4 italic">
+                No departments configured.
+              </p>
+            )}
+
+            {/* Add department */}
+            <div className="flex gap-2 mb-6">
+              <input
+                type="text"
+                value={newDepartment}
+                onChange={(e) => setNewDepartment(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddDepartment() } }}
+                className="input-tufte flex-1"
+                placeholder="Department name..."
+              />
+              <button
+                onClick={handleAddDepartment}
+                disabled={!newDepartment.trim()}
+                className="btn-secondary disabled:opacity-50"
+              >
+                Add
+              </button>
+            </div>
+
+            {/* Require department toggle */}
+            <div className="pt-4 border-t border-rule">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={requireDepartment}
+                  onChange={(e) => setRequireDepartment(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 accent-loris-brown"
+                />
+                <div>
+                  <span className="font-serif text-sm text-ink-primary">
+                    Require department on questions
+                  </span>
+                  <p className="font-mono text-[10px] text-ink-tertiary mt-1">
+                    Users must select a department before submitting.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Save */}
+            <div className="flex items-center gap-4 mt-4">
+              <button
+                onClick={handleSave}
+                disabled={isSaving || !hasChanges}
+                className="btn-primary disabled:opacity-50"
+              >
+                {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+              {hasChanges && (
+                <span className="font-mono text-xs text-status-warning">Unsaved</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column */}
+        <div className="space-y-6">
+          {/* GDrive Integration Settings */}
+          <div className="card-tufte">
+            <GDriveSettingsPanel />
+          </div>
+
+          {/* MoltenLoris Sync Settings */}
+          <div className="card-tufte">
+            <MoltenLorisSettingsPanel />
+          </div>
+        </div>
       </div>
     </div>
   )

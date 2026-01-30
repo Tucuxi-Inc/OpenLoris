@@ -111,6 +111,19 @@ export default function DocumentManagementPage() {
     }
   }
 
+  const handleBulkApprove = async (docId: string, minConfidence: number = 0.5) => {
+    const pendingCount = candidates.filter(c => c.validation_status === 'pending' && c.extraction_confidence >= minConfidence).length
+    if (!confirm(`Approve ${pendingCount} facts with confidence >= ${Math.round(minConfidence * 100)}%?`)) return
+    try {
+      const result = await documentsApi.bulkApprove(docId, { min_confidence: minConfidence })
+      await loadDocuments()
+      if (selectedDoc) await loadCandidates(selectedDoc.id)
+      alert(`Approved ${result.approved} facts${result.errors > 0 ? `, ${result.errors} errors` : ''}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk approval failed')
+    }
+  }
+
   const handleExtendGud = async (docId: string) => {
     const newDate = prompt('New good-until date (YYYY-MM-DD):')
     if (!newDate) return
@@ -389,14 +402,30 @@ export default function DocumentManagementPage() {
                 </div>
 
                 <hr className="my-4" />
-                <div className="flex gap-3">
-                  {selectedDoc.parsing_status === 'completed' && (
+                <div className="flex flex-wrap gap-3">
+                  {selectedDoc.parsing_status === 'completed' && selectedDoc.extraction_status !== 'completed' && (
                     <button
                       onClick={() => handleExtract(selectedDoc.id)}
                       className="btn-secondary text-sm"
                     >
                       Extract Facts
                     </button>
+                  )}
+                  {selectedDoc.extraction_status === 'completed' && candidates.some(c => c.validation_status === 'pending') && (
+                    <>
+                      <button
+                        onClick={() => handleBulkApprove(selectedDoc.id, 0.7)}
+                        className="btn-primary text-sm"
+                      >
+                        Approve All (≥70%)
+                      </button>
+                      <button
+                        onClick={() => handleBulkApprove(selectedDoc.id, 0.5)}
+                        className="btn-secondary text-sm"
+                      >
+                        Approve All (≥50%)
+                      </button>
+                    </>
                   )}
                   <button
                     onClick={() => handleExtendGud(selectedDoc.id)}

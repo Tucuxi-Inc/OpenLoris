@@ -1,24 +1,30 @@
 """
-Scheduler Service — runs background jobs for GUD enforcement.
+Scheduler Service — runs background jobs for GUD enforcement and MoltenLoris sync.
 
 Uses APScheduler to run periodic tasks:
 - Daily check for expired automation rules, documents, knowledge facts
 - Creates notifications at 30/7/0-day thresholds
 - Deactivates expired items
+- Hourly knowledge export to Google Drive
+- Every 10 minutes: Slack scan for expert answers
 """
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Dict, List
+from uuid import UUID
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
+from app.core.config import settings
 from app.models.automation import AutomationRule
 from app.models.documents import KnowledgeDocument
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.models.wisdom import WisdomFact
 from app.services.notification_service import notification_service
@@ -50,6 +56,27 @@ class SchedulerService:
             name="Hourly SLA breach check",
             replace_existing=True,
         )
+
+        # MoltenLoris sync jobs (only if MCP is configured)
+        if settings.MCP_SERVER_URL:
+            # Scan Slack every 10 minutes
+            self.scheduler.add_job(
+                self.scan_slack_for_answers,
+                IntervalTrigger(minutes=10),
+                id="scan_slack_for_answers",
+                name="Slack scan for expert answers",
+                replace_existing=True,
+            )
+            # Export knowledge hourly
+            self.scheduler.add_job(
+                self.export_knowledge_to_gdrive,
+                IntervalTrigger(hours=1),
+                id="export_knowledge_to_gdrive",
+                name="Export knowledge to Google Drive",
+                replace_existing=True,
+            )
+            logger.info("MoltenLoris sync jobs configured (Slack scan: 10min, GDrive export: 1hr)")
+
         self.scheduler.start()
         logger.info("Scheduler started — daily GUD checks at 02:00, hourly SLA checks")
 
@@ -243,6 +270,78 @@ class SchedulerService:
 
         await db.commit()
         return stats
+
+
+    # ------------------------------------------------------------------
+    # MoltenLoris Sync Jobs
+    # ------------------------------------------------------------------
+
+    async def scan_slack_for_answers(self):
+        """
+        Scan Slack channels for expert answers to MoltenLoris escalations.
+        Runs every 10 minutes, looks back 15 minutes to ensure no gaps.
+        """
+        if not settings.slack_channels_list:
+            return
+
+        logger.info("Running Slack scan for expert answers …")
+
+        async with AsyncSessionLocal() as db:
+            # Get all organizations
+            result = await db.execute(select(Organization))
+            orgs = list(result.scalars().all())
+
+            total_captures = 0
+            for org in orgs:
+                try:
+                    # Import here to avoid circular imports
+                    from app.services.slack_monitor_service import SlackMonitorService
+
+                    service = SlackMonitorService(db, org.id)
+                    # Look back 15 minutes (slightly more than scan interval to ensure overlap)
+                    since = datetime.now(timezone.utc) - timedelta(minutes=15)
+
+                    qa_pairs = await service.scan_for_expert_answers(since=since)
+                    if qa_pairs:
+                        captures = await service.create_captures(qa_pairs)
+                        total_captures += len(captures)
+
+                except Exception as e:
+                    logger.error(f"Slack scan error for org {org.id}: {e}")
+
+        logger.info(f"Slack scan complete — created {total_captures} captures")
+
+    async def export_knowledge_to_gdrive(self):
+        """
+        Export all approved knowledge to Google Drive.
+        Runs every hour.
+        """
+        if not settings.MCP_SERVER_URL:
+            return
+
+        logger.info("Running knowledge export to Google Drive …")
+
+        async with AsyncSessionLocal() as db:
+            # Get all organizations
+            result = await db.execute(select(Organization))
+            orgs = list(result.scalars().all())
+
+            total_exported = 0
+            for org in orgs:
+                try:
+                    # Import here to avoid circular imports
+                    from app.services.knowledge_export_service import KnowledgeExportService
+
+                    service = KnowledgeExportService(db, org.id)
+                    results = await service.export_all_knowledge()
+
+                    exported = [r for r in results if r.get("status") == "exported"]
+                    total_exported += len(exported)
+
+                except Exception as e:
+                    logger.error(f"Knowledge export error for org {org.id}: {e}")
+
+        logger.info(f"Knowledge export complete — exported {total_exported} files")
 
 
 # Global singleton

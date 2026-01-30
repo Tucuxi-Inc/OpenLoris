@@ -77,7 +77,7 @@ class WisdomFact(Base, UUIDMixin, TimestampMixin):
     )
     source_document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("knowledge_documents.id"),
+        ForeignKey("knowledge_documents.id", ondelete="SET NULL"),
         nullable=True
     )
 

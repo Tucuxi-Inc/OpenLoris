@@ -51,7 +51,7 @@ Loris connects business users with domain experts, delivering curated, expert-va
 - **GUD Enforcement** — "Good Until Date" system automatically expires and deactivates stale content
 - **Multi-Provider AI** — Supports Ollama (local + cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI
 - **Data Privacy** — Local Ollama models keep data on-premise; Ollama cloud uses encrypted transport with no prompt/output retention
-- **MoltenLoris** — Coming soon: autonomous Slack-monitoring agent powered by your knowledge base
+- **MoltenLoris** — Autonomous Slack-monitoring agent powered by your knowledge base. [Setup Guide](docs/loris-planning/MOLTENLORIS-SETUP-GUIDE.md)
 
 ## Prerequisites
 
@@ -117,7 +117,15 @@ open http://localhost:3005
 
 ### 4. Log in
 
-The login page has **quick-login buttons** for three dev accounts. On first click, each account is auto-registered; subsequent clicks log in:
+The app initializes with a **default admin account**:
+
+| Email | Password | Role |
+|-------|----------|------|
+| admin@loris.local | Password123 | Admin |
+
+Use this account to configure your organization, change the admin password, and create user accounts.
+
+**For development**, the login page also has quick-login buttons for three test accounts. On first click, each account is auto-registered; subsequent clicks log in:
 
 | Account | Email | Role | What they can do |
 |---------|-------|------|------------------|
@@ -125,7 +133,7 @@ The login page has **quick-login buttons** for three dev accounts. On first clic
 | Bob | bob@loris.dev | Domain Expert | All above + answer queue, knowledge base, documents, analytics |
 | Alice | alice@loris.dev | Admin | All above + user management, sub-domains, settings |
 
-Password for all: `Test1234!`
+Password for dev accounts: `Test1234!`
 
 ### 5. Try the workflow
 
@@ -320,6 +328,24 @@ Edit `.env` to switch AI providers:
 | Phase 9c: GDrive via Zapier MCP | Planned | Google Drive integration via Zapier MCP for unified access |
 | Phase 11: MoltenLoris Foundation | Planned | Backend support, settings UI, SOUL file generation for Slack agent |
 | Phase 7: Testing & Docs | Not started | Unit/integration tests, Alembic migrations |
+
+## MoltenLoris (Slack Agent)
+
+MoltenLoris is an autonomous Slack-monitoring agent that uses your Loris knowledge base to answer questions in Slack channels. It runs as a separate Claude Code instance with access to your organization's Google Drive.
+
+**Key features:**
+- Monitors Slack channels for questions
+- Answers using your organization's knowledge base
+- Escalates to human experts when uncertain
+- Learns from expert corrections
+
+**Setup:** See [MOLTENLORIS-SETUP-GUIDE.md](docs/loris-planning/MOLTENLORIS-SETUP-GUIDE.md) for complete setup instructions.
+
+**Architecture:** MoltenLoris and Loris Web App communicate via an "air gap" — they never connect directly. Instead:
+- Loris exports knowledge to Google Drive (via Zapier MCP)
+- MoltenLoris reads from Google Drive
+- MoltenLoris posts answers to Slack
+- Experts monitor Slack and correct MoltenLoris when needed
 
 ## Documentation
 

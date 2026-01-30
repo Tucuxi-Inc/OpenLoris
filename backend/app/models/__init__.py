@@ -18,6 +18,7 @@ from app.models.notifications import Notification, NotificationType
 from app.models.subdomain import SubDomain, ExpertSubDomainAssignment
 from app.models.analytics import DailyMetrics
 from app.models.turbo import TurboAttribution
+from app.models.slack_capture import SlackCapture, SlackCaptureStatus
 
 __all__ = [
     "Base",
@@ -58,4 +59,6 @@ __all__ = [
     "ReassignmentStatus",
     "DailyMetrics",
     "TurboAttribution",
+    "SlackCapture",
+    "SlackCaptureStatus",
 ]

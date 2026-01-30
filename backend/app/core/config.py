@@ -116,6 +116,24 @@ class Settings(BaseSettings):
     DEFAULT_PAGE_SIZE: int = Field(default=20, description="Default pagination page size")
     MAX_PAGE_SIZE: int = Field(default=100, description="Maximum pagination page size")
 
+    # MCP Integration (for MoltenLoris sync)
+    MCP_SERVER_URL: Optional[str] = Field(default=None, description="Zapier MCP server URL")
+    MCP_API_TOKEN: Optional[str] = Field(default=None, description="MCP authentication token")
+
+    # Google Drive Knowledge Sync
+    GDRIVE_KNOWLEDGE_FOLDER_ID: Optional[str] = Field(default=None, description="GDrive folder ID for knowledge export")
+    GDRIVE_KNOWLEDGE_FOLDER_PATH: str = Field(default="/Loris-Knowledge", description="GDrive folder path")
+
+    # Slack Monitoring (for capturing expert answers)
+    SLACK_MONITOR_CHANNELS: str = Field(default="", description="Comma-separated Slack channels to monitor")
+
+    @property
+    def slack_channels_list(self) -> List[str]:
+        """Parse Slack channels into a list."""
+        if not self.SLACK_MONITOR_CHANNELS:
+            return []
+        return [c.strip() for c in self.SLACK_MONITOR_CHANNELS.split(",") if c.strip()]
+
     @property
     def database_url_async(self) -> str:
         """Convert sync database URL to async version for SQLAlchemy"""

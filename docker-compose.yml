@@ -15,6 +15,11 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3-vl:235b-cloud}
       - OLLAMA_FALLBACK_MODEL=${OLLAMA_FALLBACK_MODEL:-gpt-oss:120b-cloud}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # MoltenLoris Integration
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-}
+      - GDRIVE_KNOWLEDGE_FOLDER_ID=${GDRIVE_KNOWLEDGE_FOLDER_ID:-}
+      - GDRIVE_KNOWLEDGE_FOLDER_PATH=${GDRIVE_KNOWLEDGE_FOLDER_PATH:-/Loris-Knowledge}
+      - SLACK_MONITOR_CHANNELS=${SLACK_MONITOR_CHANNELS:-}
     depends_on:
       postgres:
         condition: service_healthy
