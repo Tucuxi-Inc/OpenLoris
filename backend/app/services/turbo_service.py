@@ -302,9 +302,18 @@ class TurboService:
         question.rejection_reason = rejection_reason
 
         # Keep the turbo data for expert context
+        # Reassign the dict to trigger SQLAlchemy's change detection for JSONB
         if question.gap_analysis:
-            question.gap_analysis["turbo_rejected"] = True
-            question.gap_analysis["rejection_reason"] = rejection_reason
+            question.gap_analysis = {
+                **question.gap_analysis,
+                "turbo_rejected": True,
+                "rejection_reason": rejection_reason,
+            }
+        else:
+            question.gap_analysis = {
+                "turbo_rejected": True,
+                "rejection_reason": rejection_reason,
+            }
 
         await db.commit()
 

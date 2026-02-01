@@ -6,9 +6,71 @@
   <img src="docs/loris-planning/Loris.png" alt="Loris" width="200">
 </p>
 
+<p align="center">
+  <em>"Slow is smooth, smooth is fast"</em>
+</p>
+
+<p align="center">
+  <a href="#quick-start">Quick Start</a> &bull;
+  <a href="#features">Features</a> &bull;
+  <a href="#how-it-works">How It Works</a> &bull;
+  <a href="#screenshots">Screenshots</a> &bull;
+  <a href="#documentation">Documentation</a> &bull;
+  <a href="#contributing">Contributing</a>
+</p>
+
+---
+
 Loris connects business users with domain experts, delivering curated, expert-validated answers instead of search results. Think "Glean+" — not just finding documents, but providing actual answers.
 
-**Legal Loris** is the first implementation, focused on legal departments.
+Whether it's legal questions, HR policies, IT procedures, or any domain requiring expert knowledge — Loris routes questions to the right experts, builds institutional knowledge over time, and progressively automates answers to common questions.
+
+## Features
+
+<table>
+<tr>
+<td width="50%">
+
+### Core Capabilities
+
+- **Expert Queue** — Questions routed to domain experts with AI-assisted analysis
+- **Progressive Automation** — Each answered question can become an automated response for future similar questions
+- **Gap Analysis** — AI identifies what's covered by existing knowledge and what needs expert input
+- **Knowledge Base** — Upload documents, extract facts, build organizational knowledge
+
+</td>
+<td width="50%">
+
+### Advanced Features
+
+- **Turbo Loris** — User-controlled fast-answer mode with confidence thresholds (50%/75%/90%)
+- **MoltenLoris** — Autonomous Slack agent powered by your knowledge base
+- **Sub-Domain Routing** — Questions routed by topic (AI or manual classification)
+- **GUD Enforcement** — "Good Until Date" system expires stale content automatically
+
+</td>
+</tr>
+<tr>
+<td>
+
+### Analytics & Insights
+
+- **Metrics Dashboard** — Track automation performance, question trends, knowledge coverage
+- **Expert Performance** — Response times, satisfaction ratings, workload distribution
+- **Knowledge Coverage** — Identify gaps and track fact usage
+
+</td>
+<td>
+
+### Enterprise Ready
+
+- **Multi-Provider AI** — Ollama (local/cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI
+- **Data Privacy** — Local models keep data on-premise; cloud models use encrypted transport
+- **Role-Based Access** — Business users, domain experts, and admins with appropriate permissions
+
+</td>
+</tr>
+</table>
 
 ## How It Works
 
@@ -37,30 +99,108 @@ Loris connects business users with domain experts, delivering curated, expert-va
 </tr>
 </table>
 
-## Key Features
+### The Workflow
 
-- **Turbo Loris** — User-controlled fast-answer mode that delivers AI-generated responses instantly when knowledge confidence exceeds a user-selected threshold (50%/75%/90%)
-- **Progressive Automation** — Each answered question can become an automated response for similar future questions
-- **Gap Analysis** — AI identifies what's covered by existing knowledge and what needs expert input
-- **Knowledge Base** — Upload documents, extract facts, build an organizational knowledge graph
-- **Analytics Dashboard** — Track automation performance, question trends, knowledge coverage
-- **Sub-Domain Routing** — Questions routed to the right experts based on sub-domain classification (manual or AI)
-- **Reassignment Workflow** — Experts can flag misrouted questions; admins approve reassignments
-- **Department & Org Settings** — Configurable departments, required fields, admin settings panel
-- **In-App Notifications** — Real-time alerts for answers, assignments, routing, expiring content
-- **GUD Enforcement** — "Good Until Date" system automatically expires and deactivates stale content
-- **Multi-Provider AI** — Supports Ollama (local + cloud), Anthropic Claude, AWS Bedrock, Azure OpenAI
-- **Data Privacy** — Local Ollama models keep data on-premise; Ollama cloud uses encrypted transport with no prompt/output retention
-- **MoltenLoris** — Autonomous Slack-monitoring agent powered by your knowledge base. [Setup Guide](docs/loris-planning/MOLTENLORIS-SETUP-GUIDE.md)
+```
+User asks question
+        ↓
+   Check automation rules ──→ Match found? → Auto-answer delivered
+        ↓ no match                                    ↓
+   Run gap analysis                            User accepts/rejects
+        ↓                                             ↓
+   Route to expert queue                    Rejected → Expert queue
+        ↓
+   Expert answers with AI assist
+        ↓
+   User receives answer
+        ↓
+   Expert can create automation rule → Future similar questions auto-answered
+```
 
-## Prerequisites
+## Screenshots
+
+> **Note:** Screenshots coming soon. These placeholders show where key UI elements will be documented.
+
+<details>
+<summary><strong>Login Page</strong></summary>
+
+<!-- SCREENSHOT: Login page with Loris branding, login form, and default admin hint -->
+*The login page features the Loris mascot, clean login form, and a hint about the default admin account for first-time setup.*
+
+</details>
+
+<details>
+<summary><strong>User Dashboard</strong></summary>
+
+<!-- SCREENSHOT: User dashboard showing question list with status indicators -->
+*Business users see their questions with clear status indicators: pending, auto-answered, answered, resolved.*
+
+</details>
+
+<details>
+<summary><strong>Ask a Question</strong></summary>
+
+<!-- SCREENSHOT: Ask question form with sub-domain selector and Turbo mode toggle -->
+*The question form includes sub-domain selection, department (if configured), and Turbo Loris mode for instant AI answers.*
+
+</details>
+
+<details>
+<summary><strong>Expert Queue</strong></summary>
+
+<!-- SCREENSHOT: Expert queue with pending questions, priority indicators, gap analysis -->
+*Experts see pending questions with priority levels, sub-domain tags, and one-click assignment.*
+
+</details>
+
+<details>
+<summary><strong>Expert Answer View</strong></summary>
+
+<!-- SCREENSHOT: Expert answering a question with gap analysis panel, pre-populated answer -->
+*When answering, experts see AI gap analysis with relevant facts highlighted and a pre-populated answer draft.*
+
+</details>
+
+<details>
+<summary><strong>Knowledge Management</strong></summary>
+
+<!-- SCREENSHOT: Knowledge facts list with tier badges, search, and CRUD actions -->
+*Manage knowledge facts with tier classification (authoritative, expert-validated, AI-generated), search, and GUD tracking.*
+
+</details>
+
+<details>
+<summary><strong>Document Management</strong></summary>
+
+<!-- SCREENSHOT: Document list with extraction status, GUD dates, fact counts -->
+*Upload documents (PDF, DOCX, TXT), extract facts with AI, and manage document freshness with GUD dates.*
+
+</details>
+
+<details>
+<summary><strong>Analytics Dashboard</strong></summary>
+
+<!-- SCREENSHOT: Analytics with charts showing question trends, automation rate, expert performance -->
+*Track automation performance, question trends over time, knowledge coverage, and expert leaderboards.*
+
+</details>
+
+<details>
+<summary><strong>Admin Settings</strong></summary>
+
+<!-- SCREENSHOT: Admin settings page with user management, sub-domains, org settings tabs -->
+*Admins manage users, configure sub-domains, set up departments, and configure AI providers.*
+
+</details>
+
+## Quick Start
+
+### Prerequisites
 
 - **Docker Desktop** — [Install Docker](https://www.docker.com/products/docker-desktop/)
 - **Ollama** — [Install Ollama](https://ollama.ai) (runs on your host machine, not inside Docker)
 
-## Quick Start
-
-### 1. Clone and start
+### 1. Clone and Start
 
 ```bash
 git clone https://github.com/Tucuxi-Inc/Loris.git
@@ -83,7 +223,7 @@ This starts four containers:
 | PostgreSQL | localhost:5435 | Database with pgvector extension |
 | Redis | localhost:6385 | Cache |
 
-### 2. Pull Ollama models
+### 2. Pull Ollama Models
 
 Ollama must be running on your host machine. The backend connects to it from Docker via `host.docker.internal`.
 
@@ -98,11 +238,9 @@ ollama pull qwen3-vl:235b-cloud
 ollama pull gpt-oss:120b-cloud
 ```
 
-**Cloud models** (names ending in `-cloud`) run on Ollama's infrastructure. Traffic is encrypted and prompts/outputs are not stored. AI features work on any machine regardless of local GPU capacity.
+**Cloud models** (names ending in `-cloud`) run on Ollama's infrastructure. Traffic is encrypted and prompts/outputs are not stored.
 
 If you prefer fully local inference, edit `.env` and set `OLLAMA_MODEL` to any local model (e.g., `llama3.2`).
-
-**Note:** If Ollama is unavailable, the embedding service falls back to a hash-based approximation. This is fine for development but won't produce meaningful automation matches.
 
 ### 3. Verify
 
@@ -115,109 +253,29 @@ curl http://localhost:8005/health
 open http://localhost:3005
 ```
 
-### 4. Log in
+### 4. First Login
 
-The app initializes with a **default admin account**:
+The database is seeded with a **default admin account**:
 
 | Email | Password | Role |
 |-------|----------|------|
-| admin@loris.local | Password123 | Admin |
+| `admin@loris.local` | `Password123` | Admin |
 
-Use this account to configure your organization, change the admin password, and create user accounts.
+**First steps after login:**
+1. Go to **Settings** → Change the admin password
+2. Go to **Users** → Create accounts for your team
+3. Go to **Sub-Domains** → Define your knowledge domains
+4. Go to **Knowledge** → Start building your knowledge base
 
-**For development**, the login page also has quick-login buttons for three test accounts. On first click, each account is auto-registered; subsequent clicks log in:
+### 5. Try the Workflow
 
-| Account | Email | Role | What they can do |
-|---------|-------|------|------------------|
-| Carol | carol@loris.dev | Business User | Ask questions, view answers, give feedback |
-| Bob | bob@loris.dev | Domain Expert | All above + answer queue, knowledge base, documents, analytics |
-| Alice | alice@loris.dev | Admin | All above + user management, sub-domains, settings |
-
-Password for dev accounts: `Test1234!`
-
-### 5. Try the workflow
-
-1. Log in as **Carol**, ask a question
-2. Log in as **Bob**, go to Queue, assign the question, answer it
-3. Log in as **Carol**, see the answer, give a 5-star rating
-4. Log in as **Bob**, go to the answered question, click "Create Automation Rule"
-5. Log in as **Carol**, ask a similar question — it gets auto-answered instantly
-6. Check **Analytics** (Bob or Alice) to see the metrics
-
-## Database
-
-### No migrations required
-
-Tables are auto-created on backend startup via SQLAlchemy's `Base.metadata.create_all()`. There are no Alembic migrations. When you run `docker-compose up`, the backend creates all tables automatically.
-
-The PostgreSQL init script (`database/init.sql`) only installs the `uuid-ossp` and `vector` extensions.
-
-### Resetting the database
-
-To drop all data and start fresh:
-
-```bash
-docker exec loris-postgres-1 psql -U loris -d loris -c \
-  "DROP SCHEMA public CASCADE; CREATE SCHEMA public; \
-   CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; \
-   CREATE EXTENSION IF NOT EXISTS \"vector\";"
-docker-compose restart backend
-```
-
-Tables are recreated automatically on backend restart. Dev accounts will need to be re-registered (just click the quick-login buttons on the login page).
-
-### Linux note
-
-On Linux, Docker containers may not resolve `host.docker.internal` by default. Add this to the `backend` service in `docker-compose.yml`:
-
-```yaml
-extra_hosts:
-  - "host.docker.internal:host-gateway"
-```
-
-## Development
-
-### Rebuilding after code changes
-
-```bash
-# Rebuild backend
-docker-compose up -d --build backend
-
-# Rebuild frontend (needed after adding new dependencies)
-docker-compose up -d --build frontend
-
-# Restart frontend (needed after adding new .tsx files for Vite to detect them)
-docker-compose restart frontend
-
-# View backend logs
-docker logs loris-backend-1 -f
-```
-
-### Running locally (without Docker)
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-Requires PostgreSQL with pgvector and Redis running locally. Update `DATABASE_URL` and `REDIS_URL` in `.env` accordingly.
-
-### Optional admin tools
-
-```bash
-# Start with pgAdmin and Redis Commander
-docker-compose --profile tools up -d
-
-# pgAdmin: http://localhost:5055 (admin@loris.dev / admin)
-# Redis Commander: http://localhost:8085
-```
+1. Create a **business user** account and ask a question
+2. Create a **domain expert** account
+3. As the expert, go to **Queue**, assign the question, and answer it
+4. As the user, see the answer and give a rating
+5. As the expert, go to the answered question and click **"Create Automation Rule"**
+6. As the user, ask a similar question — it gets auto-answered instantly
+7. Check **Analytics** to see the automation metrics
 
 ## Tech Stack
 
@@ -235,68 +293,115 @@ docker-compose --profile tools up -d
 ## Project Structure
 
 ```
-├── backend/                # FastAPI application
+Loris/
+├── backend/                    # FastAPI application
 │   ├── app/
-│   │   ├── main.py         # App factory, router registration, scheduler lifecycle
-│   │   ├── api/v1/         # REST endpoints
-│   │   │   ├── auth.py     # Register, login, JWT tokens
-│   │   │   ├── questions.py # Q&A lifecycle + automation integration
-│   │   │   ├── automation.py # Automation rule CRUD
-│   │   │   ├── knowledge.py # Knowledge facts, search, gap analysis
-│   │   │   ├── documents.py # Document upload, extraction, GUD
-│   │   │   ├── analytics.py # Metrics dashboard (5 endpoints)
-│   │   │   ├── notifications.py # Notification list, read, dismiss
-│   │   │   ├── users.py    # User management (admin)
-│   │   │   ├── subdomains.py # Sub-domain CRUD, routing, reassignment
-│   │   │   ├── org_settings.py # Organization settings
-│   │   │   ├── settings.py # AI provider config
-│   │   │   └── ai_settings.py # AI provider configuration (Phase 9)
-│   │   ├── models/         # SQLAlchemy models (18 tables)
-│   │   ├── services/       # Business logic
-│   │   │   ├── analytics_service.py    # Metrics computation
-│   │   │   ├── automation_service.py   # Matching + auto-answer delivery
-│   │   │   ├── knowledge_service.py    # Semantic search, gap analysis
-│   │   │   ├── document_service.py     # PDF/DOCX parsing, fact extraction
-│   │   │   ├── notification_service.py # Notification lifecycle
-│   │   │   ├── scheduler_service.py    # Daily GUD expiry checks
-│   │   │   ├── embedding_service.py    # Ollama + hash fallback
-│   │   │   ├── subdomain_service.py   # AI classification, SLA monitoring
-│   │   │   └── ai_provider_service.py  # Multi-provider AI abstraction
-│   │   └── core/           # Config, database setup
+│   │   ├── main.py            # App factory, router registration
+│   │   ├── api/v1/            # REST endpoints (auth, questions, knowledge, etc.)
+│   │   ├── models/            # SQLAlchemy models (18+ tables)
+│   │   ├── services/          # Business logic (automation, embedding, AI, etc.)
+│   │   └── core/              # Config, database setup
 │   └── Dockerfile
-├── frontend/               # React application
+│
+├── frontend/                   # React application
 │   └── src/
-│       ├── components/     # Layout, NotificationBell, LorisAvatar
-│       ├── contexts/       # Auth state
-│       ├── pages/          # User, Expert, Admin, Notifications
-│       │   ├── user/       # Dashboard, QuestionDetail
-│       │   ├── expert/     # Dashboard, Queue, Knowledge, Documents, Analytics
-│       │   └── admin/      # UserManagement, SubDomains, Reassignments, OrgSettings, AISettings
-│       ├── lib/api/        # API clients (questions, knowledge, documents, analytics, etc.)
-│       └── styles/         # Tufte design system
-├── database/               # init.sql (pgvector extension)
-├── docs/                   # Planning documentation
-├── docker-compose.yml
-└── .env.example
+│       ├── components/        # Reusable components (Layout, LorisAvatar, etc.)
+│       ├── contexts/          # Auth state management
+│       ├── pages/             # User, Expert, Admin pages
+│       ├── lib/api/           # API clients
+│       └── styles/            # Tufte-inspired design system
+│
+├── database/                   # PostgreSQL init scripts
+├── docs/                       # Planning documentation
+├── docker-compose.yml          # Container orchestration
+└── .env.example               # Environment template
 ```
 
 ## API Endpoints
 
-All endpoints are documented in the interactive Swagger UI at http://localhost:8005/docs.
+All endpoints documented at http://localhost:8005/docs after starting.
 
-| Group | Prefix | Endpoints | Auth |
-|-------|--------|-----------|------|
-| Auth | `/api/v1/auth` | Register, login, refresh, profile | Public (register/login) |
-| Questions | `/api/v1/questions` | Submit, list, detail, feedback, accept/reject auto-answer, expert queue, assign, answer, clarification | User+ |
-| Automation | `/api/v1/automation` | Rule CRUD, create from answered question | Expert+ |
-| Knowledge | `/api/v1/knowledge` | Facts CRUD, semantic search, gap analysis, stats | Expert+ |
-| Documents | `/api/v1/documents` | Upload, extraction, fact candidates, GUD, departments | Expert+ |
-| Analytics | `/api/v1/analytics` | Overview, question trends, automation performance, knowledge coverage, expert performance | Expert+ |
-| Notifications | `/api/v1/notifications` | Unread count, list, mark read, dismiss | User+ |
-| Users | `/api/v1/users` | User CRUD, role/status management, sub-domain assignment | Admin |
-| Sub-Domains | `/api/v1/subdomains` | CRUD, expert assignment, routing, reassignment | Admin (CRUD), User+ (list), Expert+ (detail/routing) |
-| Org Settings | `/api/v1/org` | Department management, question requirements | Admin (write), User+ (read) |
-| Settings | `/api/v1/settings` | AI provider config, available models | Expert+ |
+| Group | Prefix | Description |
+|-------|--------|-------------|
+| Auth | `/api/v1/auth` | Register, login, JWT tokens, profile |
+| Questions | `/api/v1/questions` | Full Q&A lifecycle, expert queue, automation |
+| Automation | `/api/v1/automation` | Rule CRUD, create from answered questions |
+| Knowledge | `/api/v1/knowledge` | Facts CRUD, semantic search, gap analysis |
+| Documents | `/api/v1/documents` | Upload, parsing, fact extraction |
+| Analytics | `/api/v1/analytics` | Metrics, trends, performance |
+| Notifications | `/api/v1/notifications` | In-app notification system |
+| Users | `/api/v1/users` | User management (admin) |
+| Sub-Domains | `/api/v1/subdomains` | Topic routing configuration |
+| Org Settings | `/api/v1/org` | Organization configuration |
+
+## Database
+
+### Auto-Created Tables
+
+Tables are auto-created on backend startup via SQLAlchemy. No manual migrations needed for fresh installs.
+
+### Resetting the Database
+
+```bash
+docker exec loris-postgres-1 psql -U loris -d loris -c \
+  "DROP SCHEMA public CASCADE; CREATE SCHEMA public; \
+   CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; \
+   CREATE EXTENSION IF NOT EXISTS \"vector\";"
+docker-compose restart backend
+```
+
+### Linux Note
+
+On Linux, add this to the `backend` service in `docker-compose.yml`:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+## Development
+
+### Rebuilding After Changes
+
+```bash
+# Rebuild backend
+docker-compose up -d --build backend
+
+# Rebuild frontend
+docker-compose up -d --build frontend
+
+# Restart frontend (for new .tsx files)
+docker-compose restart frontend
+
+# View logs
+docker logs loris-backend-1 -f
+```
+
+### Running Without Docker
+
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Requires PostgreSQL with pgvector and Redis running locally.
+
+### Admin Tools (Optional)
+
+```bash
+# Start with pgAdmin and Redis Commander
+docker-compose --profile tools up -d
+
+# pgAdmin: http://localhost:5055 (admin@loris.dev / admin)
+# Redis Commander: http://localhost:8085
+```
 
 ## AI Provider Configuration
 
@@ -307,59 +412,95 @@ Edit `.env` to switch AI providers:
 | Ollama (default) | `local_ollama` | Ollama running on host |
 | Anthropic Claude | `cloud_anthropic` | `ANTHROPIC_API_KEY` |
 | AWS Bedrock | `cloud_bedrock` | AWS credentials configured |
-| Azure OpenAI | `cloud_azure` | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_KEY` |
-
-## Implementation Status
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 0: Foundation | Complete | Docker, project structure, branding |
-| Phase 1: Auth | Complete | JWT auth, RBAC, registration |
-| Phase 2: Questions | Complete | Full Q&A lifecycle, expert queue, feedback |
-| Phase 3: Automation | Complete | Rule CRUD, embedding matching, auto-answer delivery |
-| Phase 4: Knowledge + Documents + UI | Complete | Knowledge base, document management, role-based UI |
-| Phase 5: Notifications & GUD | Complete | In-app notifications, scheduled GUD enforcement |
-| Phase 6: Analytics | Complete | Metrics dashboard, question trends, automation performance |
-| Phase 6.5: Sub-Domain Routing & Org Settings | Complete | Sub-domains, expert routing, reassignment, departments, org settings |
-| Phase 8: Turbo Loris | Complete | User-controlled fast-answer mode with confidence thresholds, MoltenLoris placeholder |
-| Phase 9a: AI Provider Backend | Complete | Encrypted API key storage, org-specific AI config, multi-provider support |
-| Phase 9b: AI Provider Frontend | Complete | Admin UI for AI provider settings, connection testing, model selection |
-| Phase 10: LorisAvatar | Complete | Reusable Loris mascot component (15 moods, 6 sizes), integrated throughout app |
-| Phase 9c: GDrive via Zapier MCP | Planned | Google Drive integration via Zapier MCP for unified access |
-| Phase 11: MoltenLoris Foundation | Planned | Backend support, settings UI, SOUL file generation for Slack agent |
-| Phase 7: Testing & Docs | Not started | Unit/integration tests, Alembic migrations |
+| Azure OpenAI | `cloud_azure` | `AZURE_OPENAI_*` env vars |
 
 ## MoltenLoris (Slack Agent)
 
-MoltenLoris is an autonomous Slack-monitoring agent that uses your Loris knowledge base to answer questions in Slack channels. It runs as a separate Claude Code instance with access to your organization's Google Drive.
+<p align="center">
+  <img src="docs/loris-planning/Molten_Loris.png" alt="MoltenLoris" width="120">
+</p>
+
+MoltenLoris is an autonomous Slack-monitoring agent that uses your Loris knowledge base to answer questions in Slack channels.
 
 **Key features:**
-- Monitors Slack channels for questions
+- Monitors configured Slack channels for questions
 - Answers using your organization's knowledge base
 - Escalates to human experts when uncertain
 - Learns from expert corrections
 
-**Setup:** See [MOLTENLORIS-SETUP-GUIDE.md](docs/loris-planning/MOLTENLORIS-SETUP-GUIDE.md) for complete setup instructions.
-
-**Architecture:** MoltenLoris and Loris Web App communicate via an "air gap" — they never connect directly. Instead:
-- Loris exports knowledge to Google Drive (via Zapier MCP)
-- MoltenLoris reads from Google Drive
-- MoltenLoris posts answers to Slack
-- Experts monitor Slack and correct MoltenLoris when needed
+**Setup:** See [MOLTENLORIS-SETUP-GUIDE.md](docs/loris-planning/MOLTENLORIS-SETUP-GUIDE.md) for complete instructions.
 
 ## Documentation
 
-See `docs/loris-planning/` for detailed planning documents:
-- [Project Vision](docs/loris-planning/01-PROJECT-VISION.md)
-- [User Personas](docs/loris-planning/02-USER-PERSONAS.md)
-- [System Architecture](docs/loris-planning/03-SYSTEM-ARCHITECTURE.md)
-- [Data Model](docs/loris-planning/04-DATA-MODEL.md)
-- [API Specification](docs/loris-planning/05-API-SPECIFICATION.md)
-- [Automation Workflow](docs/loris-planning/06-AUTOMATION-WORKFLOW.md)
-- [Migration Strategy](docs/loris-planning/08-MIGRATION-STRATEGY.md)
-- [GDrive & MoltenLoris Planning](docs/loris-planning/10-GDRIVE-AND-MOLTENLORIS.md)
-- [SOUL Template (MoltenLoris behavior)](docs/loris-planning/SOUL-TEMPLATE.md)
+Detailed planning documents in `docs/loris-planning/`:
+
+- [Project Vision](docs/loris-planning/01-PROJECT-VISION.md) — What we're building and why
+- [User Personas](docs/loris-planning/02-USER-PERSONAS.md) — User journeys and use cases
+- [System Architecture](docs/loris-planning/03-SYSTEM-ARCHITECTURE.md) — Technical architecture
+- [Data Model](docs/loris-planning/04-DATA-MODEL.md) — Database schema
+- [API Specification](docs/loris-planning/05-API-SPECIFICATION.md) — REST API details
+- [Automation Workflow](docs/loris-planning/06-AUTOMATION-WORKFLOW.md) — Auto-answering logic
+- [Migration Strategy](docs/loris-planning/08-MIGRATION-STRATEGY.md) — Implementation phases
+
+## Contributing
+
+We welcome contributions! Here's how to get started:
+
+### Setting Up for Development
+
+1. Fork the repository
+2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/Loris.git`
+3. Create a branch: `git checkout -b feature/your-feature-name`
+4. Make your changes
+5. Run the app locally to test
+6. Submit a pull request
+
+### Code Style
+
+- **Backend:** Follow PEP 8, use type hints, async/await patterns
+- **Frontend:** TypeScript strict mode, functional components, Tailwind CSS
+- **Commits:** Use conventional commits (feat:, fix:, docs:, etc.)
+
+### Areas for Contribution
+
+- **Tests** — Unit and integration tests (see `backend/tests/`)
+- **Documentation** — Improve docs, add examples
+- **UI/UX** — Design improvements, accessibility
+- **Features** — Check GitHub Issues for feature requests
+- **Bug Fixes** — Check GitHub Issues for reported bugs
+
+### Reporting Issues
+
+Please use [GitHub Issues](https://github.com/Tucuxi-Inc/Loris/issues) to report bugs or request features. Include:
+- Steps to reproduce (for bugs)
+- Expected vs actual behavior
+- Environment details (OS, browser, Docker version)
+
+## Meet the Loris Family
+
+<table>
+<tr>
+<td align="center"><img src="docs/loris-planning/Loris.png" width="60"><br><sub>Loris</sub></td>
+<td align="center"><img src="docs/loris-planning/TransWarp_Loris.png" width="60"><br><sub>TransWarp</sub></td>
+<td align="center"><img src="docs/loris-planning/Scholar_Loris.png" width="60"><br><sub>Scholar</sub></td>
+<td align="center"><img src="docs/loris-planning/Thinking_Loris.png" width="60"><br><sub>Thinking</sub></td>
+<td align="center"><img src="docs/loris-planning/Celebration_Loris.png" width="60"><br><sub>Celebration</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/loris-planning/Molten_Loris.png" width="60"><br><sub>Molten</sub></td>
+<td align="center"><img src="docs/loris-planning/DetectiveLoris.png" width="60"><br><sub>Detective</sub></td>
+<td align="center"><img src="docs/loris-planning/Architect_Loris.png" width="60"><br><sub>Architect</sub></td>
+<td align="center"><img src="docs/loris-planning/Confused_Loris.png" width="60"><br><sub>Confused</sub></td>
+<td align="center"><img src="docs/loris-planning/Alert_Loris.png" width="60"><br><sub>Alert</sub></td>
+</tr>
+</table>
 
 ## License
 
-Proprietary — Tucuxi Inc.
+MIT License — see [LICENSE](LICENSE) for details.
+
+---
+
+<p align="center">
+  <strong>Built with care by <a href="https://github.com/Tucuxi-Inc">Tucuxi Inc</a></strong>
+</p>

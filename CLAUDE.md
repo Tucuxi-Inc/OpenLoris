@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Loris** is an intelligent Q&A platform that connects business users with domain experts. It delivers curated, expert-validated answers instead of search results ("Glean+"). **Legal Loris** is the first implementation, focused on legal departments.
+**Loris** is an intelligent Q&A platform that connects business users with domain experts. It delivers curated, expert-validated answers instead of search results ("Glean+"). Whether it's legal questions, HR policies, IT procedures, or any domain requiring expert knowledge — Loris routes questions to the right experts, builds institutional knowledge over time, and progressively automates answers to common questions.
 
 Core workflow: User asks question → System checks automation rules → If match: instant answer (TransWarp) → If no match: expert queue with gap analysis → Expert answers → Expert can elect to create automation rule for similar future questions.
 

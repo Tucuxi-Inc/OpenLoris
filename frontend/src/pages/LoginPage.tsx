@@ -2,13 +2,6 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import LorisAvatar from '../components/LorisAvatar'
 
-// Dev-only quick login accounts (remove for production)
-const DEV_ACCOUNTS = [
-  { email: 'carol@loris.dev', password: 'Test1234!', name: 'Carol', role: 'Business User', apiRole: 'business_user' },
-  { email: 'bob@loris.dev', password: 'Test1234!', name: 'Bob', role: 'Domain Expert', apiRole: 'domain_expert' },
-  { email: 'alice@loris.dev', password: 'Test1234!', name: 'Alice', role: 'Admin', apiRole: 'admin' },
-]
-
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -30,51 +23,6 @@ export default function LoginPage() {
     }
   }
 
-  const handleQuickLogin = async (account: typeof DEV_ACCOUNTS[0]) => {
-    setError('')
-    setIsLoading(true)
-    try {
-      await login(account.email, account.password)
-    } catch (err) {
-      // If login fails, try to register the account
-      const errorMsg = err instanceof Error ? err.message : 'Login failed'
-      if (errorMsg.includes('Incorrect email or password')) {
-        try {
-          // Register the account
-          const response = await fetch('/api/v1/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: account.email,
-              password: account.password,
-              name: account.name,
-              organization_name: 'Loris Development',
-              role: account.apiRole,
-            }),
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            localStorage.setItem('access_token', data.access_token)
-            localStorage.setItem('refresh_token', data.refresh_token)
-            // Reload to pick up the new session
-            window.location.href = '/dashboard'
-            return
-          } else {
-            const errData = await response.json()
-            setError(errData.detail || 'Registration failed')
-          }
-        } catch (regErr) {
-          setError('Failed to create account')
-        }
-      } else {
-        setError(errorMsg)
-      }
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
   return (
     <div className="min-h-screen bg-cream relative overflow-hidden">
       {/* Content */}
@@ -87,7 +35,7 @@ export default function LoginPage() {
             Have a question? Get a definitive answer from Loris.
           </p>
           <p className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-1">
-            Intelligent Legal Q&A Platform
+            Intelligent Q&A Platform
           </p>
           <p className="font-mono text-[10px] text-ink-muted">
             Slow is smooth, smooth is fast
@@ -144,33 +92,14 @@ export default function LoginPage() {
             </form>
           </div>
 
-          {/* Dev quick-login accounts */}
-          <div className="mt-6">
-            <p className="font-mono text-[10px] text-ink-muted text-center mb-3 uppercase tracking-wide">
-              Development Quick Login
+          {/* First-time setup hint */}
+          <div className="mt-6 text-center">
+            <p className="font-mono text-[10px] text-ink-muted">
+              First time? Use the default admin account to get started.
             </p>
-            <div className="space-y-2">
-              {DEV_ACCOUNTS.map((account) => (
-                <button
-                  key={account.email}
-                  onClick={() => handleQuickLogin(account)}
-                  disabled={isLoading}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-white border border-rule-light rounded-sm hover:border-loris-brown hover:bg-cream-200 transition-colors disabled:opacity-50"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-serif text-sm text-ink-primary">{account.name}</span>
-                    <span className="font-mono text-[10px] text-ink-muted">{account.email}</span>
-                  </div>
-                  <span className={`font-mono text-xs ${
-                    account.role === 'Admin' ? 'text-status-error' :
-                    account.role === 'Domain Expert' ? 'text-status-warning' :
-                    'text-ink-tertiary'
-                  }`}>
-                    {account.role}
-                  </span>
-                </button>
-              ))}
-            </div>
+            <p className="font-mono text-[10px] text-ink-tertiary mt-1">
+              admin@loris.local / Password123
+            </p>
           </div>
         </div>
       </div>

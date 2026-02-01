@@ -19,6 +19,7 @@ from app.models.subdomain import SubDomain, ExpertSubDomainAssignment
 from app.models.analytics import DailyMetrics
 from app.models.turbo import TurboAttribution
 from app.models.slack_capture import SlackCapture, SlackCaptureStatus
+from app.models.molten_activity import MoltenLorisActivity
 
 __all__ = [
     "Base",
@@ -61,4 +62,5 @@ __all__ = [
     "TurboAttribution",
     "SlackCapture",
     "SlackCaptureStatus",
+    "MoltenLorisActivity",
 ]

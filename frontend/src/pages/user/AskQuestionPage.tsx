@@ -95,7 +95,7 @@ export default function AskQuestionPage() {
       <div className="mb-8">
         <h1 className="text-3xl text-ink-primary mb-2">Ask a Question</h1>
         <p className="font-serif text-ink-secondary">
-          Describe your legal question and our experts will provide a curated answer.
+          Describe your question and our experts will provide a curated answer.
         </p>
       </div>
 
@@ -115,7 +115,7 @@ export default function AskQuestionPage() {
           />
           <div className="flex items-center justify-between mt-2">
             <p className="font-mono text-xs text-ink-tertiary">
-              Tip: Include relevant context like jurisdiction, contract type, or specific circumstances.
+              Tip: Include relevant context and specifics about the circumstances — this helps our system and experts respond better.
             </p>
             <span className={`font-mono text-xs ${showWordHint ? 'text-status-warning' : 'text-ink-muted'}`}>
               {wordCount} / {MIN_WORDS} words min

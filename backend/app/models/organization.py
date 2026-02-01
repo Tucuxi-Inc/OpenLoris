@@ -11,6 +11,7 @@ from app.models.base import Base, TimestampMixin, UUIDMixin
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.questions import Question
+    from app.models.molten_activity import MoltenLorisActivity
 
 
 class Organization(Base, UUIDMixin, TimestampMixin):
@@ -36,6 +37,9 @@ class Organization(Base, UUIDMixin, TimestampMixin):
     # Relationships
     users: Mapped[List["User"]] = relationship("User", back_populates="organization")
     questions: Mapped[List["Question"]] = relationship("Question", back_populates="organization")
+    molten_activities: Mapped[List["MoltenLorisActivity"]] = relationship(
+        "MoltenLorisActivity", back_populates="organization"
+    )
 
     def __repr__(self) -> str:
         return f"<Organization {self.name}>"

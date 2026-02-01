@@ -1,120 +1,164 @@
 /**
- * MoltenLoris Sync Settings Panel.
- * Admin UI for viewing sync status and triggering manual operations.
+ * MoltenLoris Settings Panel.
+ * Admin UI for configuring MoltenLoris integration - MCP server and Slack channels.
  */
 
 import { useState, useEffect } from 'react'
-import { moltenSyncApi, SyncStatus, ExportStatus, SlackScanResult, KnowledgeExportResult } from '../../lib/api/moltenSync'
+import {
+  moltenSyncApi,
+  MoltenLorisSettings,
+  SyncStatus,
+  ExportStatus,
+  ConnectionTestResult,
+} from '../../lib/api/moltenSync'
 import LorisAvatar from '../LorisAvatar'
 
 export default function MoltenLorisSettingsPanel() {
-  // State
+  // Settings state
+  const [settings, setSettings] = useState<MoltenLorisSettings | null>(null)
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null)
   const [exportStatus, setExportStatus] = useState<ExportStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [scanning, setScanning] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  // Last operation results
-  const [lastScanResult, setLastScanResult] = useState<SlackScanResult | null>(null)
-  const [lastExportResult, setLastExportResult] = useState<KnowledgeExportResult | null>(null)
+  // Form state
+  const [enabled, setEnabled] = useState(false)
+  const [mcpUrl, setMcpUrl] = useState('')
+  const [channels, setChannels] = useState<string[]>([])
+  const [newChannel, setNewChannel] = useState('')
 
-  // Load status on mount
+  // Connection test state
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionTestResult | null>(null)
+
+  // Load settings on mount
   useEffect(() => {
-    loadStatus()
+    loadSettings()
   }, [])
 
-  const loadStatus = async () => {
+  const loadSettings = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const [status, expStatus] = await Promise.all([
+      const [settingsData, statusData, expStatusData] = await Promise.all([
+        moltenSyncApi.getSettings(),
         moltenSyncApi.getStatus(),
         moltenSyncApi.getExportStatus(),
       ])
 
-      setSyncStatus(status)
-      setExportStatus(expStatus)
+      setSettings(settingsData)
+      setSyncStatus(statusData)
+      setExportStatus(expStatusData)
+
+      // Populate form
+      setEnabled(settingsData.enabled)
+      setChannels(settingsData.slack_channels)
+
+      // If there was a previous test result, show it
+      if (settingsData.last_test_result) {
+        setConnectionStatus({
+          connected: settingsData.last_test_result.connected,
+          message: settingsData.last_test_result.message,
+          tested_at: settingsData.last_test_at || '',
+        })
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load status')
+      setError(err instanceof Error ? err.message : 'Failed to load settings')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleScanSlack = async () => {
+  const handleSave = async () => {
     try {
-      setScanning(true)
+      setSaving(true)
       setError(null)
       setSuccessMessage(null)
 
-      const result = await moltenSyncApi.scanSlack(24)
-      setLastScanResult(result)
-      setSuccessMessage(`Scan complete: ${result.qa_pairs_found} Q&A pairs found, ${result.captures_created} new captures created`)
-
-      // Reload status
-      await loadStatus()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Slack scan failed')
-    } finally {
-      setScanning(false)
-    }
-  }
-
-  const handleExportKnowledge = async () => {
-    try {
-      setExporting(true)
-      setError(null)
-      setSuccessMessage(null)
-
-      const result = await moltenSyncApi.exportKnowledge()
-      setLastExportResult(result)
-
-      if (result.total_errors > 0) {
-        setError(`Export completed with ${result.total_errors} error(s)`)
-      } else {
-        setSuccessMessage(`Export complete: ${result.total_exported} files exported to Google Drive`)
+      const updateData: Parameters<typeof moltenSyncApi.updateSettings>[0] = {
+        enabled,
+        slack_channels: channels,
       }
 
-      // Reload status
-      await loadStatus()
+      // Only include mcpUrl if it was changed (non-empty)
+      if (mcpUrl.trim()) {
+        updateData.mcp_server_url = mcpUrl.trim()
+      }
+
+      const updated = await moltenSyncApi.updateSettings(updateData)
+      setSettings(updated)
+      setMcpUrl('') // Clear the URL field after save
+      setSuccessMessage('Settings saved successfully')
+
+      // Reload status to reflect changes
+      const statusData = await moltenSyncApi.getStatus()
+      setSyncStatus(statusData)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Knowledge export failed')
+      setError(err instanceof Error ? err.message : 'Failed to save settings')
     } finally {
-      setExporting(false)
+      setSaving(false)
     }
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'ready':
-        return 'text-status-success'
-      case 'partially_configured':
-        return 'text-status-warning'
-      default:
-        return 'text-status-error'
+  const handleTestConnection = async () => {
+    try {
+      setTesting(true)
+      setConnectionStatus(null)
+      setError(null)
+
+      // If URL was entered, save it first
+      if (mcpUrl.trim()) {
+        await moltenSyncApi.updateSettings({ mcp_server_url: mcpUrl.trim() })
+        setMcpUrl('')
+      }
+
+      const result = await moltenSyncApi.testConnection()
+      setConnectionStatus(result)
+
+      // Reload settings to get updated last_test info
+      const updated = await moltenSyncApi.getSettings()
+      setSettings(updated)
+    } catch (err) {
+      setConnectionStatus({
+        connected: false,
+        message: err instanceof Error ? err.message : 'Connection test failed',
+        tested_at: new Date().toISOString(),
+      })
+    } finally {
+      setTesting(false)
     }
   }
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'ready':
-        return '✓ Ready'
-      case 'partially_configured':
-        return '⚠ Partially Configured'
-      default:
-        return '✗ Not Configured'
+  const handleAddChannel = () => {
+    const channel = newChannel.trim().replace(/^#/, '') // Remove # prefix
+    if (!channel) return
+    if (channels.includes(channel)) {
+      setError('Channel already added')
+      setTimeout(() => setError(null), 3000)
+      return
     }
+    setChannels([...channels, channel])
+    setNewChannel('')
   }
+
+  const handleRemoveChannel = (channel: string) => {
+    setChannels(channels.filter(c => c !== channel))
+  }
+
+  const hasChanges = settings && (
+    enabled !== settings.enabled ||
+    JSON.stringify(channels) !== JSON.stringify(settings.slack_channels) ||
+    mcpUrl.trim() !== ''
+  )
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <LorisAvatar mood="thinking" size="md" animate />
-        <span className="ml-3 font-serif text-ink-secondary">Loading MoltenLoris status...</span>
+        <span className="ml-3 font-serif text-ink-secondary">Loading MoltenLoris settings...</span>
       </div>
     )
   }
@@ -131,7 +175,7 @@ export default function MoltenLorisSettingsPanel() {
         <div>
           <h3 className="font-serif text-lg text-ink-primary">MoltenLoris Integration</h3>
           <p className="font-mono text-xs text-ink-tertiary">
-            Slack monitoring + Google Drive knowledge sync
+            Configure MCP server and Slack channel monitoring
           </p>
         </div>
       </div>
@@ -148,49 +192,206 @@ export default function MoltenLorisSettingsPanel() {
         </div>
       )}
 
-      {/* Configuration Status */}
-      <div className="space-y-3">
-        <h4 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase">
-          Configuration Status
-        </h4>
+      {/* Enable Toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <label className="font-serif text-ink-primary">Enable MoltenLoris Integration</label>
+          <p className="font-mono text-xs text-ink-tertiary">
+            Allow MoltenLoris to sync with your knowledge base
+          </p>
+        </div>
+        <button
+          onClick={() => setEnabled(!enabled)}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+            enabled ? 'bg-status-success' : 'bg-rule-light'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-6' : 'translate-x-1'
+            }`}
+          />
+        </button>
+      </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="flex justify-between items-center">
-            <span className="font-serif text-sm text-ink-secondary">Overall Status</span>
-            <span className={`font-mono text-sm ${getStatusColor(syncStatus?.status || '')}`}>
-              {getStatusText(syncStatus?.status || '')}
+      {/* MCP Server URL */}
+      <div>
+        <label className="label-tufte">MCP Server URL</label>
+        <div className="flex gap-2">
+          <input
+            type="url"
+            value={mcpUrl}
+            onChange={(e) => setMcpUrl(e.target.value)}
+            placeholder={settings?.mcp_server_url_set ? '••••••••••••••••' : 'https://hooks.zapier.com/...'}
+            className="input-tufte flex-1"
+          />
+          <button
+            onClick={handleTestConnection}
+            disabled={testing || (!mcpUrl.trim() && !settings?.mcp_server_url_set)}
+            className="btn-secondary disabled:opacity-50"
+          >
+            {testing ? 'Testing...' : 'Test Connection'}
+          </button>
+        </div>
+        {settings?.mcp_server_url_set && !mcpUrl && (
+          <p className="font-mono text-xs text-ink-muted mt-1">
+            URL is configured. Enter a new URL to update it.
+          </p>
+        )}
+      </div>
+
+      {/* Connection Status */}
+      {connectionStatus && (
+        <div className={`p-3 rounded-sm border ${
+          connectionStatus.connected
+            ? 'bg-cream-100 border-status-success'
+            : 'bg-cream-200 border-status-error'
+        }`}>
+          <div className="flex items-center gap-2">
+            <span className={`font-mono text-sm ${
+              connectionStatus.connected ? 'text-status-success' : 'text-status-error'
+            }`}>
+              {connectionStatus.connected ? '✓ Connected' : '✗ Not Connected'}
             </span>
           </div>
+          <p className="font-serif text-sm text-ink-secondary mt-1">
+            {connectionStatus.message}
+          </p>
+        </div>
+      )}
 
-          <div className="flex justify-between items-center">
-            <span className="font-serif text-sm text-ink-secondary">MCP Server</span>
-            <span className={`font-mono text-sm ${syncStatus?.mcp_configured ? 'text-status-success' : 'text-status-error'}`}>
-              {syncStatus?.mcp_configured ? '✓ Connected' : '✗ Not set'}
-            </span>
-          </div>
+      {/* Slack Channels */}
+      <div>
+        <label className="label-tufte">Slack Channels to Monitor</label>
+        <p className="font-mono text-xs text-ink-tertiary mb-2">
+          Channels where MoltenLoris will watch for questions
+        </p>
 
-          <div className="flex justify-between items-center">
-            <span className="font-serif text-sm text-ink-secondary">GDrive Folder</span>
-            <span className="font-mono text-xs text-ink-muted">
-              {syncStatus?.gdrive_folder || 'Not set'}
-            </span>
+        {/* Channel list */}
+        {channels.length > 0 ? (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {channels.map(channel => (
+              <div
+                key={channel}
+                className="flex items-center gap-2 px-3 py-1 bg-cream-200 rounded-sm"
+              >
+                <span className="font-mono text-sm text-ink-primary">#{channel}</span>
+                <button
+                  onClick={() => handleRemoveChannel(channel)}
+                  className="text-ink-tertiary hover:text-status-error transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
           </div>
+        ) : (
+          <p className="font-serif text-sm text-ink-muted mb-3 italic">
+            No channels configured
+          </p>
+        )}
 
-          <div className="flex justify-between items-center">
-            <span className="font-serif text-sm text-ink-secondary">Slack Channels</span>
-            <span className="font-mono text-xs text-ink-muted">
-              {syncStatus?.slack_channels?.length
-                ? syncStatus.slack_channels.join(', ')
-                : 'None configured'}
-            </span>
-          </div>
+        {/* Add channel input */}
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={newChannel}
+            onChange={(e) => setNewChannel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                handleAddChannel()
+              }
+            }}
+            placeholder="#channel-name"
+            className="input-tufte flex-1"
+          />
+          <button
+            onClick={handleAddChannel}
+            disabled={!newChannel.trim()}
+            className="btn-secondary disabled:opacity-50"
+          >
+            Add
+          </button>
         </div>
       </div>
 
-      {/* Export Statistics */}
+      {/* Save Button */}
+      <div className="flex items-center gap-4 pt-4 border-t border-rule-light">
+        <button
+          onClick={handleSave}
+          disabled={saving || !hasChanges}
+          className="btn-primary disabled:opacity-50"
+        >
+          {saving ? 'Saving...' : 'Save Settings'}
+        </button>
+
+        {hasChanges && (
+          <span className="font-mono text-xs text-status-warning">Unsaved changes</span>
+        )}
+
+        <button
+          onClick={loadSettings}
+          disabled={loading}
+          className="btn-secondary disabled:opacity-50 ml-auto"
+        >
+          Refresh
+        </button>
+      </div>
+
+      {/* Current Status Summary */}
+      {syncStatus && (
+        <div className="pt-4 border-t border-rule-light">
+          <h4 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-3">
+            Current Status
+          </h4>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex justify-between items-center">
+              <span className="font-serif text-sm text-ink-secondary">Overall</span>
+              <span className={`font-mono text-sm ${
+                syncStatus.status === 'ready' ? 'text-status-success' :
+                syncStatus.status === 'partially_configured' ? 'text-status-warning' :
+                'text-status-error'
+              }`}>
+                {syncStatus.status === 'ready' ? '✓ Ready' :
+                 syncStatus.status === 'partially_configured' ? '⚠ Partial' :
+                 '✗ Not Configured'}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="font-serif text-sm text-ink-secondary">MCP Server</span>
+              <span className={`font-mono text-sm ${
+                syncStatus.mcp_configured ? 'text-status-success' : 'text-status-error'
+              }`}>
+                {syncStatus.mcp_configured ? '✓ Set' : '✗ Not set'}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="font-serif text-sm text-ink-secondary">Channels</span>
+              <span className="font-mono text-sm text-ink-primary">
+                {syncStatus.slack_channels.length || 0}
+              </span>
+            </div>
+
+            <div className="flex justify-between items-center">
+              <span className="font-serif text-sm text-ink-secondary">GDrive</span>
+              <span className="font-mono text-xs text-ink-muted">
+                {syncStatus.gdrive_folder || 'Not set'}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Knowledge Statistics */}
       {exportStatus && (
-        <div className="space-y-3 pt-4 border-t border-rule-light">
-          <h4 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase">
+        <div className="pt-4 border-t border-rule-light">
+          <h4 className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-3">
             Knowledge Statistics
           </h4>
 
@@ -210,94 +411,19 @@ export default function MoltenLorisSettingsPanel() {
               <p className="font-mono text-xs text-ink-tertiary">FAQ Rules</p>
             </div>
           </div>
-
-          {/* Category breakdown */}
-          {Object.keys(exportStatus.categories).length > 0 && (
-            <div className="mt-3">
-              <p className="font-mono text-xs text-ink-tertiary mb-2">Facts by Category:</p>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(exportStatus.categories).map(([cat, count]) => (
-                  <span
-                    key={cat}
-                    className="px-2 py-1 bg-cream-200 rounded-sm font-mono text-xs text-ink-secondary"
-                  >
-                    {cat}: {count}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Action Buttons */}
-      <div className="flex gap-3 pt-4 border-t border-rule-light">
-        <button
-          onClick={handleScanSlack}
-          disabled={scanning || syncStatus?.status === 'not_configured'}
-          className="btn-secondary disabled:opacity-50"
-        >
-          {scanning ? 'Scanning...' : 'Scan Slack Now'}
-        </button>
-
-        <button
-          onClick={handleExportKnowledge}
-          disabled={exporting || !exportStatus?.mcp_configured}
-          className="btn-secondary disabled:opacity-50"
-        >
-          {exporting ? 'Exporting...' : 'Export to Drive'}
-        </button>
-
-        <button
-          onClick={loadStatus}
-          disabled={loading}
-          className="btn-secondary disabled:opacity-50"
-        >
-          Refresh
-        </button>
-      </div>
-
-      {/* Last Operation Results */}
-      {lastScanResult && (
-        <div className="p-3 bg-cream-100 rounded-sm border border-rule-light">
-          <p className="font-mono text-xs text-ink-tertiary mb-1">Last Slack Scan:</p>
-          <p className="font-serif text-sm text-ink-secondary">
-            Found {lastScanResult.qa_pairs_found} Q&A pairs,
-            created {lastScanResult.captures_created} new captures
-            from {lastScanResult.channels_scanned.join(', ')}
-          </p>
-        </div>
-      )}
-
-      {lastExportResult && (
-        <div className="p-3 bg-cream-100 rounded-sm border border-rule-light">
-          <p className="font-mono text-xs text-ink-tertiary mb-1">Last Export:</p>
-          <p className="font-serif text-sm text-ink-secondary">
-            Exported {lastExportResult.total_exported} files
-            {lastExportResult.total_errors > 0 && ` (${lastExportResult.total_errors} errors)`}
-          </p>
-          {lastExportResult.exports
-            .filter(e => e.status === 'exported')
-            .slice(0, 5)
-            .map((exp, i) => (
-              <p key={i} className="font-mono text-xs text-ink-muted ml-2">
-                • {exp.filename}: {exp.fact_count || exp.rule_count || 0} items
-              </p>
-            ))}
         </div>
       )}
 
       {/* Help Text */}
       <div className="text-xs text-ink-muted border-t border-rule-light pt-4 mt-4">
-        <p className="font-mono uppercase tracking-wide mb-2">How MoltenLoris Sync Works</p>
-        <ul className="space-y-1 font-serif">
-          <li>• MoltenLoris answers questions in Slack autonomously</li>
-          <li>• When it escalates, experts answer in the Slack thread</li>
-          <li>• Loris scans Slack and captures these expert answers</li>
-          <li>• Approved answers become knowledge facts</li>
-          <li>• Knowledge is exported to Google Drive as markdown files</li>
-          <li>• MoltenLoris reads from Google Drive to improve its answers</li>
-        </ul>
+        <p className="font-mono uppercase tracking-wide mb-2">Setup Instructions</p>
+        <ol className="space-y-1 font-serif list-decimal list-inside">
+          <li>Enter your MCP server URL (Zapier webhook or custom endpoint)</li>
+          <li>Click "Test Connection" to verify connectivity</li>
+          <li>Add Slack channels for MoltenLoris to monitor</li>
+          <li>Enable the integration and save settings</li>
+          <li>Generate a SOUL file from the MoltenLoris page to configure your bot</li>
+        </ol>
       </div>
     </div>
   )
