@@ -119,79 +119,66 @@ User asks question
 
 ## Screenshots
 
-> **Note:** Screenshots coming soon. These placeholders show where key UI elements will be documented.
+### Login Page
+*Clean login with Loris branding and default admin hint for first-time setup.*
 
-<details>
-<summary><strong>Login Page</strong></summary>
+<img src="frontend/public/loris-images/Login.png" alt="Login Page" width="700">
 
-<!-- SCREENSHOT: Login page with Loris branding, login form, and default admin hint -->
-*The login page features the Loris mascot, clean login form, and a hint about the default admin account for first-time setup.*
+---
 
-</details>
+### User Dashboard
+*Business users see their questions with clear status indicators.*
 
-<details>
-<summary><strong>User Dashboard</strong></summary>
+<img src="frontend/public/loris-images/User_Dashboard.png" alt="User Dashboard" width="700">
 
-<!-- SCREENSHOT: User dashboard showing question list with status indicators -->
-*Business users see their questions with clear status indicators: pending, auto-answered, answered, resolved.*
+---
 
-</details>
+### Ask a Question
+*Submit questions with sub-domain selection, department, and Turbo Loris mode for instant AI answers.*
 
-<details>
-<summary><strong>Ask a Question</strong></summary>
+<img src="frontend/public/loris-images/Ask_A_Question.png" alt="Ask a Question" width="700">
 
-<!-- SCREENSHOT: Ask question form with sub-domain selector and Turbo mode toggle -->
-*The question form includes sub-domain selection, department (if configured), and Turbo Loris mode for instant AI answers.*
+---
 
-</details>
+### Expert Queue
+*Experts see pending questions with priority levels and sub-domain routing.*
 
-<details>
-<summary><strong>Expert Queue</strong></summary>
+<img src="frontend/public/loris-images/Expert_Queue.png" alt="Expert Queue" width="700">
 
-<!-- SCREENSHOT: Expert queue with pending questions, priority indicators, gap analysis -->
-*Experts see pending questions with priority levels, sub-domain tags, and one-click assignment.*
+---
 
-</details>
+### Expert Answer View
+*AI gap analysis helps experts craft answers with relevant knowledge highlighted.*
 
-<details>
-<summary><strong>Expert Answer View</strong></summary>
+<img src="frontend/public/loris-images/expert_answer_view.png" alt="Expert Answer View" width="700">
 
-<!-- SCREENSHOT: Expert answering a question with gap analysis panel, pre-populated answer -->
-*When answering, experts see AI gap analysis with relevant facts highlighted and a pre-populated answer draft.*
+---
 
-</details>
+### Knowledge Management
+*Manage knowledge facts with tier classification and GUD (Good Until Date) tracking.*
 
-<details>
-<summary><strong>Knowledge Management</strong></summary>
+<img src="frontend/public/loris-images/Knowledge_Management.png" alt="Knowledge Management" width="700">
 
-<!-- SCREENSHOT: Knowledge facts list with tier badges, search, and CRUD actions -->
-*Manage knowledge facts with tier classification (authoritative, expert-validated, AI-generated), search, and GUD tracking.*
+---
 
-</details>
+### Document Management
+*Upload documents, extract facts with AI, and manage document freshness.*
 
-<details>
-<summary><strong>Document Management</strong></summary>
+<img src="frontend/public/loris-images/Document_Management.png" alt="Document Management" width="700">
 
-<!-- SCREENSHOT: Document list with extraction status, GUD dates, fact counts -->
-*Upload documents (PDF, DOCX, TXT), extract facts with AI, and manage document freshness with GUD dates.*
+---
 
-</details>
+### Analytics Dashboard
+*Track question trends, automation performance, and expert metrics.*
 
-<details>
-<summary><strong>Analytics Dashboard</strong></summary>
+<img src="frontend/public/loris-images/Analytics_Dashboard.png" alt="Analytics Dashboard" width="700">
 
-<!-- SCREENSHOT: Analytics with charts showing question trends, automation rate, expert performance -->
-*Track automation performance, question trends over time, knowledge coverage, and expert leaderboards.*
+---
 
-</details>
+### Admin Settings
+*Manage users, sub-domains, departments, and AI provider configuration.*
 
-<details>
-<summary><strong>Admin Settings</strong></summary>
-
-<!-- SCREENSHOT: Admin settings page with user management, sub-domains, org settings tabs -->
-*Admins manage users, configure sub-domains, set up departments, and configure AI providers.*
-
-</details>
+<img src="frontend/public/loris-images/Admin_Settings.png" alt="Admin Settings" width="700">
 
 ## Quick Start
 
@@ -497,7 +484,13 @@ Please use [GitHub Issues](https://github.com/Tucuxi-Inc/Loris/issues) to report
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License (with additions) — see [LICENSE](LICENSE) for details.
+
+**Key points:**
+- Free to use commercially, including as a standalone application
+- Must rename if redistributing (cannot use "Loris" name for derivatives)
+- Must provide attribution and link to license
+- Contributors agree code may be used commercially by Tucuxi, Inc.
 
 ---
 
