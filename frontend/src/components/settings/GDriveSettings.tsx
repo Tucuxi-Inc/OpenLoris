@@ -348,8 +348,8 @@ export default function GDriveSettingsPanel({ onSave }: GDriveSettingsPanelProps
           ))}
         </div>
         <p className="font-mono text-xs text-ink-tertiary mt-1">
-          {syncDirection === 'export' && 'Export knowledge facts from Loris to GDrive'}
-          {syncDirection === 'import' && 'Import knowledge from GDrive to Loris'}
+          {syncDirection === 'export' && 'Export knowledge facts from Open Loris to GDrive'}
+          {syncDirection === 'import' && 'Import knowledge from GDrive to Open Loris'}
           {syncDirection === 'bidirectional' && 'Sync in both directions'}
         </p>
       </div>

@@ -48,3 +48,8 @@ tmp/
 *.pem
 .vercel
 .turbo
+
+# Claude Code
+CLAUDE.md
+handoff.md
+.claude/

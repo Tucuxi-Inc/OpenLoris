@@ -163,7 +163,7 @@ export default function AskQuestionPage() {
             onChange={(e) => setSubdomainId(e.target.value)}
             className="input-tufte w-full"
           >
-            <option value="">Not sure — let Loris classify it</option>
+            <option value="">Not sure — let Open Loris classify it</option>
             {subdomains.map((sd) => (
               <option key={sd.id} value={sd.id}>
                 {sd.name}
@@ -171,7 +171,7 @@ export default function AskQuestionPage() {
             ))}
           </select>
           <p className="mt-1 font-mono text-[10px] text-ink-tertiary">
-            If you leave this blank, Loris will route your question to the right experts automatically.
+            If you leave this blank, Open Loris will route your question to the right experts automatically.
           </p>
         </div>
 

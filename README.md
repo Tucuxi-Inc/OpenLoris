@@ -1,9 +1,9 @@
-# Loris
+# Open Loris
 
 **Intelligent Q&A Platform for Domain Experts**
 
 <p align="center">
-  <img src="docs/loris-planning/Loris.png" alt="Loris" width="200">
+  <img src="docs/loris-planning/Loris.png" alt="Open Loris" width="200">
 </p>
 
 <p align="center">
@@ -31,7 +31,7 @@ Organizations lose institutional knowledge constantly. Experts answer the same q
 - Onboarding takes months because tribal knowledge isn't documented
 - Search returns documents, not answers
 
-**Loris transforms this:**
+**Open Loris transforms this:**
 - Sarah answers once, creates an automation rule
 - Similar questions answered instantly, forever
 - Knowledge compounds over time
@@ -41,9 +41,9 @@ Organizations lose institutional knowledge constantly. Experts answer the same q
 
 ## The "Glean+" Concept
 
-Unlike search tools that return documents and hope you find what you need, Loris delivers **actual answers**:
+Unlike search tools that return documents and hope you find what you need, Open Loris delivers **actual answers**:
 
-| Traditional Search | Loris |
+| Traditional Search | Open Loris |
 |-------------------|-------|
 | "Here are 47 documents mentioning 'expense policy'" | "Expenses over $100 require manager approval. Submit via the portal within 30 days." |
 | User reads multiple docs, synthesizes answer | Answer delivered instantly, expert-validated |
@@ -142,7 +142,7 @@ Every answered question is a candidate for automation. The system learns from yo
 
 ### Advanced Features
 
-- **Turbo Loris** — User-controlled fast-answer mode with confidence thresholds
+- **Turbo Mode** — User-controlled fast-answer mode with confidence thresholds
 - **MoltenLoris** — Autonomous Slack agent powered by your knowledge base
 - **Sub-Domain Routing** — Questions routed by topic (AI or manual classification)
 - **GUD System** — "Good Until Date" expires stale content automatically
@@ -218,7 +218,7 @@ Questions flow to the right experts automatically:
 - SLA tracking per sub-domain
 - Reassignment workflow if misrouted
 
-### Turbo Loris (User-Controlled Speed)
+### Turbo Mode (User-Controlled Speed)
 
 Users can opt-in to faster, AI-generated answers:
 - Choose confidence threshold: 50% / 75% / 90%
@@ -291,7 +291,7 @@ Each automation rule created is permanent leverage. The system becomes more valu
 ## Screenshots
 
 ### Login Page
-*Clean login with Loris branding and default admin hint for first-time setup.*
+*Clean login with Open Loris branding and default admin hint for first-time setup.*
 
 <img src="frontend/public/loris-images/Login.png" alt="Login Page" width="700">
 
@@ -305,7 +305,7 @@ Each automation rule created is permanent leverage. The system becomes more valu
 ---
 
 ### Ask a Question
-*Submit questions with sub-domain selection, department, and Turbo Loris mode for instant AI answers.*
+*Submit questions with sub-domain selection, department, and Turbo mode for instant AI answers.*
 
 <img src="frontend/public/loris-images/Ask_A_Question.png" alt="Ask a Question" width="700">
 
@@ -363,8 +363,8 @@ Each automation rule created is permanent leverage. The system becomes more valu
 ### 1. Clone and Start
 
 ```bash
-git clone https://github.com/Tucuxi-Inc/Loris.git
-cd Loris
+git clone https://github.com/Tucuxi-Inc/OpenLoris.git
+cd OpenLoris
 
 # Copy environment config (defaults work out of the box)
 cp .env.example .env
@@ -468,7 +468,7 @@ The demo includes sample sub-domains, knowledge facts, questions, and an automat
 ## Project Structure
 
 ```
-Loris/
+OpenLoris/
 ├── backend/                    # FastAPI application
 │   ├── app/
 │   │   ├── main.py            # App factory, router registration
@@ -487,7 +487,7 @@ Loris/
 │       └── styles/            # Tufte-inspired design system
 │
 ├── database/                   # PostgreSQL init scripts
-├── docs/                       # Planning documentation
+├── docs/                       # Documentation and assets
 ├── docker-compose.yml          # Container orchestration
 └── .env.example               # Environment template
 ```
@@ -522,7 +522,7 @@ Tables are auto-created on backend startup via SQLAlchemy. No manual migrations 
 ### Resetting the Database
 
 ```bash
-docker exec loris-postgres-1 psql -U loris -d loris -c \
+docker exec openloris-postgres-1 psql -U loris -d loris -c \
   "DROP SCHEMA public CASCADE; CREATE SCHEMA public; \
    CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"; \
    CREATE EXTENSION IF NOT EXISTS \"vector\";"
@@ -555,7 +555,7 @@ docker-compose up -d --build frontend
 docker-compose restart frontend
 
 # View logs
-docker logs loris-backend-1 -f
+docker logs openloris-backend-1 -f
 ```
 
 ### Running Without Docker
@@ -605,7 +605,7 @@ Edit `.env` to switch AI providers:
   <img src="docs/loris-planning/Molten_Loris.png" alt="MoltenLoris" width="120">
 </p>
 
-MoltenLoris is an autonomous Slack-monitoring agent that uses your Loris knowledge base to answer questions in Slack channels.
+MoltenLoris is an autonomous Slack-monitoring agent that uses your Open Loris knowledge base to answer questions in Slack channels.
 
 **Key features:**
 - Monitors configured Slack channels for questions
@@ -619,20 +619,6 @@ Your knowledge base becomes accessible where people already work.
 
 ---
 
-## Documentation
-
-Detailed planning documents in `docs/loris-planning/`:
-
-- [Project Vision](docs/loris-planning/01-PROJECT-VISION.md) — What we're building and why
-- [User Personas](docs/loris-planning/02-USER-PERSONAS.md) — User journeys and use cases
-- [System Architecture](docs/loris-planning/03-SYSTEM-ARCHITECTURE.md) — Technical architecture
-- [Data Model](docs/loris-planning/04-DATA-MODEL.md) — Database schema
-- [API Specification](docs/loris-planning/05-API-SPECIFICATION.md) — REST API details
-- [Automation Workflow](docs/loris-planning/06-AUTOMATION-WORKFLOW.md) — Auto-answering logic
-- [Migration Strategy](docs/loris-planning/08-MIGRATION-STRATEGY.md) — Implementation phases
-
----
-
 ## Contributing
 
 We welcome contributions! Here's how to get started:
@@ -640,7 +626,7 @@ We welcome contributions! Here's how to get started:
 ### Setting Up for Development
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/Loris.git`
+2. Clone your fork: `git clone https://github.com/YOUR-USERNAME/OpenLoris.git`
 3. Create a branch: `git checkout -b feature/your-feature-name`
 4. Make your changes
 5. Run the app locally to test
@@ -662,7 +648,7 @@ We welcome contributions! Here's how to get started:
 
 ### Reporting Issues
 
-Please use [GitHub Issues](https://github.com/Tucuxi-Inc/Loris/issues) to report bugs or request features. Include:
+Please use [GitHub Issues](https://github.com/Tucuxi-Inc/OpenLoris/issues) to report bugs or request features. Include:
 - Steps to reproduce (for bugs)
 - Expected vs actual behavior
 - Environment details (OS, browser, Docker version)
@@ -696,7 +682,7 @@ MIT License (with additions) — see [LICENSE](LICENSE) for details.
 
 **Key points:**
 - Free to use commercially, including as a standalone application
-- Must rename if redistributing (cannot use "Loris" name for derivatives)
+- Must rename if redistributing (cannot use "Loris" or "Open Loris" name for derivatives)
 - Must provide attribution and link to license
 - Contributors agree code may be used commercially by Tucuxi, Inc.
 

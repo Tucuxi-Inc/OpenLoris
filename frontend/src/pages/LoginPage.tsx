@@ -30,9 +30,9 @@ export default function LoginPage() {
         {/* Hero section */}
         <div className="text-center mb-10 max-w-lg">
           <LorisAvatar mood="default" size="xl" className="mx-auto mb-6" />
-          <h1 className="font-serif text-5xl text-ink-primary mb-3">Loris</h1>
+          <h1 className="font-serif text-5xl text-ink-primary mb-3">Open Loris</h1>
           <p className="font-serif text-xl text-ink-secondary leading-relaxed mb-4">
-            Have a question? Get a definitive answer from Loris.
+            Have a question? Get a definitive answer from Open Loris.
           </p>
           <p className="font-mono text-xs text-ink-tertiary tracking-wide uppercase mb-1">
             Intelligent Q&A Platform

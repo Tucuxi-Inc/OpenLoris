@@ -20,11 +20,11 @@ export default function Layout() {
             <Link to="/dashboard" className="flex items-center gap-3 no-underline hover:no-underline">
               <img
                 src="/loris-images/Loris.png"
-                alt="Loris"
+                alt="Open Loris"
                 className="h-14 w-auto"
               />
               <div className="flex flex-col">
-                <span className="font-serif text-2xl text-ink-primary">Loris</span>
+                <span className="font-serif text-2xl text-ink-primary">Open Loris</span>
                 <span className="font-mono text-[10px] text-ink-tertiary tracking-wide">
                   Slow is smooth, smooth is fast
                 </span>

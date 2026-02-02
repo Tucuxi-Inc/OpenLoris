@@ -206,7 +206,7 @@ export default function AIProviderSettingsPanel() {
         AI Provider
       </h3>
       <p className="font-serif text-sm text-ink-secondary mb-6">
-        Configure which AI service Loris uses for inference. Different providers offer different
+        Configure which AI service Open Loris uses for inference. Different providers offer different
         trade-offs between capability, cost, and data privacy.
       </p>
 
