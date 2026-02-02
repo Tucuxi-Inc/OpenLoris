@@ -599,6 +599,19 @@ Edit `.env` to switch AI providers:
 
 ---
 
+## Documentation
+
+For a comprehensive guide to how Open Loris works, including process flows, user stories, and detailed feature explanations, see:
+
+- **[How It Works](docs/HOW-IT-WORKS.md)** — Complete system documentation with diagrams and workflows
+
+Additional documentation:
+- [MoltenLoris Setup Guide](docs/loris-planning/MOLTENLORIS-SETUP-GUIDE.md) — Slack integration setup
+- [Knowledge File Format](docs/loris-planning/Loris-Knowledge-File-Format-Specification.md) — Import/export format
+- [SOUL Template](docs/loris-planning/SOUL-TEMPLATE.md) — MoltenLoris configuration
+
+---
+
 ## MoltenLoris (Slack Agent)
 
 <p align="center">
